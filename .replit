@@ -47,3 +47,6 @@ integrations = ["javascript_database:1.0.0"]
 [userenv.shared]
 ADMIN_EMAIL = "admin@truckertools.com"
 ADMIN_PASSWORD = "admin123"
+
+[userenv.production]
+SITE_URL = "https://trucking-blog-tools.replit.app"

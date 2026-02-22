@@ -230,9 +230,8 @@ export async function registerRoutes(
     const publishedPosts = await storage.getPosts(true);
     const cats = await storage.getCategories();
     const tgs = await storage.getTags();
-    const baseUrl = process.env.REPLIT_DEV_DOMAIN
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : "http://localhost:5000";
+    const baseUrl = process.env.SITE_URL
+      || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "http://localhost:5000");
 
     let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
     xml += `  <url><loc>${baseUrl}/</loc><priority>1.0</priority></url>\n`;
@@ -256,9 +255,8 @@ export async function registerRoutes(
   });
 
   app.get("/robots.txt", (_req, res) => {
-    const baseUrl = process.env.REPLIT_DEV_DOMAIN
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : "http://localhost:5000";
+    const baseUrl = process.env.SITE_URL
+      || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "http://localhost:5000");
     const txt = `User-agent: *\nAllow: /\nDisallow: /admin\n\nSitemap: ${baseUrl}/sitemap.xml\n`;
     res.type("text/plain").send(txt);
   });
