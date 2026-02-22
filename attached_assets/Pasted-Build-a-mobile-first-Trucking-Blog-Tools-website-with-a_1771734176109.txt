@@ -1,0 +1,83 @@
+Build a mobile-first Trucking “Blog + Tools” website with a protected admin CMS so I can create/edit/publish posts from my phone without touching code.
+
+Primary goals:
+- SEO-friendly blog (Google indexable)
+- Admin panel to write posts (no redeploy to publish)
+- Posts stored in Replit Database (DEV first). Do NOT require a production DB during development.
+- Later we will add micro-tools like a route-to-trip-log converter; scaffold the Tools section now.
+
+Stack & constraints:
+- Use Next.js (App Router) with TypeScript.
+- Use server-side rendering for post pages (SSR) so Google can crawl content.
+- Styling: Tailwind CSS (simple, fast, minimal).
+- Storage during development: use Replit SQL DEV database if available; if not, use a simple SQLite file in the project for development. I want posts persisted across restarts in development.
+- When deployed, the app should be compatible with attaching a production Postgres later, but do NOT create/attach production DB now.
+- Keep dependencies minimal and avoid heavy libraries.
+- Security: admin login required. Hash passwords (bcrypt). Use httpOnly session cookie. No public admin endpoints.
+
+Public site pages:
+1) Home: latest posts + categories list + search box
+2) /blog: paginated list of posts
+3) /post/[slug]: single post page with:
+   - title, author (optional), published date, updated date
+   - featured image (URL field)
+   - table of contents generated from headings
+   - SEO meta tags: title, description, OG tags
+4) /category/[slug] and /tag/[slug]
+5) /search?q=
+6) /about, /contact, /privacy, /affiliate-disclosure
+7) /tools: list of tools (scaffold)
+8) /tools/route-log-converter: scaffold page with a form UI and placeholder output (NOT fully functional yet)
+
+Admin (protected routes under /admin):
+- /admin/login
+- /admin/dashboard (list posts, quick stats)
+- /admin/posts/new and /admin/posts/[id]/edit
+  Fields: title, slug (auto-generate), excerpt, meta_description, content (Markdown), status (draft/published), published_at, featured_image_url, categories, tags.
+- /admin/categories (CRUD)
+- /admin/tags (CRUD)
+- /admin/link-library (CRUD) to store affiliate links:
+  Fields: label, url, notes, category (e.g., CB Radios, Mattresses)
+  Also provide a simple “copy snippet” button that generates a markdown block for inserting into posts.
+
+Content rendering:
+- Markdown editor: a plain textarea is fine.
+- Render markdown safely on public pages (sanitize HTML).
+- Generate TOC from markdown headings.
+
+SEO essentials:
+- Generate /sitemap.xml (dynamic from published posts)
+- Generate /robots.txt (allow crawling; disallow /admin)
+- Ensure canonical URLs on post pages.
+
+Affiliate compliance:
+- Put an Affiliate Disclosure page in the footer.
+- Add a small disclosure line near the top of each post template (configurable).
+
+Database schema (create migrations/DDL in repo):
+Tables:
+- users (id, email, password_hash, created_at)
+- posts (id, title, slug UNIQUE, excerpt, meta_description, content_md, status, featured_image_url, published_at, updated_at)
+- categories (id, name, slug UNIQUE)
+- tags (id, name, slug UNIQUE)
+- post_categories (post_id, category_id)
+- post_tags (post_id, tag_id)
+- links (id, label, url, notes, category, created_at)
+
+Seed data:
+- Create one admin user using env vars ADMIN_EMAIL and ADMIN_PASSWORD (set sensible defaults for local dev, but tell me to change them).
+- Seed a couple sample categories: Cab Comfort, Sleep, Cooking, Safety, Tech
+- Seed one sample post (draft).
+
+Deliverables:
+- Working app running in Replit
+- Clear README with:
+  1) How to run locally in Replit
+  2) How to log into /admin
+  3) How to create/publish a post
+  4) How sitemap/robots work
+  5) How to deploy (Autoscale recommended) and then later attach a production DB
+  6) How to connect a custom domain later
+- IMPORTANT: Do NOT enable any always-on deployment while building. I want development-first.
+
+Build the project now, ensure it runs, and show me the /admin login and a published post page working.
