@@ -17,12 +17,12 @@ export default function AdminLoginPage() {
     return null;
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      await login({ email, password });
+    login({ email, password }).then(() => {
       setLocation("/admin/dashboard");
-    } catch {}
+    }).catch(() => {
+    });
   };
 
   return (
