@@ -233,24 +233,33 @@ export async function registerRoutes(
     const baseUrl = process.env.SITE_URL
       || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "http://localhost:5000");
 
-    let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
-    xml += `  <url><loc>${baseUrl}/</loc><priority>1.0</priority></url>\n`;
-    xml += `  <url><loc>${baseUrl}/blog</loc><priority>0.9</priority></url>\n`;
-    xml += `  <url><loc>${baseUrl}/tools</loc><priority>0.7</priority></url>\n`;
-    xml += `  <url><loc>${baseUrl}/about</loc><priority>0.5</priority></url>\n`;
-    xml += `  <url><loc>${baseUrl}/contact</loc><priority>0.5</priority></url>\n`;
+    const urls: string[] = [];
+
+    const addUrl = (loc: string, priority: string, lastmod?: string) => {
+      let entry = `  <url>\n    <loc>${loc}</loc>\n`;
+      if (lastmod) entry += `    <lastmod>${lastmod}</lastmod>\n`;
+      entry += `    <priority>${priority}</priority>\n  </url>`;
+      urls.push(entry);
+    };
+
+    addUrl(`${baseUrl}/`, "1.0");
+    addUrl(`${baseUrl}/blog`, "0.9");
+    addUrl(`${baseUrl}/tools`, "0.7");
+    addUrl(`${baseUrl}/about`, "0.5");
+    addUrl(`${baseUrl}/contact`, "0.5");
 
     for (const post of publishedPosts) {
-      xml += `  <url><loc>${baseUrl}/post/${post.slug}</loc><lastmod>${new Date(post.updatedAt).toISOString().split("T")[0]}</lastmod><priority>0.8</priority></url>\n`;
+      const lastmod = new Date(post.updatedAt).toISOString().split("T")[0];
+      addUrl(`${baseUrl}/post/${post.slug}`, "0.8", lastmod);
     }
     for (const cat of cats) {
-      xml += `  <url><loc>${baseUrl}/category/${cat.slug}</loc><priority>0.6</priority></url>\n`;
+      addUrl(`${baseUrl}/category/${cat.slug}`, "0.6");
     }
     for (const tag of tgs) {
-      xml += `  <url><loc>${baseUrl}/tag/${tag.slug}</loc><priority>0.5</priority></url>\n`;
+      addUrl(`${baseUrl}/tag/${tag.slug}`, "0.5");
     }
 
-    xml += `</urlset>`;
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join("\n")}\n</urlset>`;
     res.type("application/xml").send(xml);
   });
 
