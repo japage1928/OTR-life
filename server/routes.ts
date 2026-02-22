@@ -130,8 +130,8 @@ export async function registerRoutes(
   app.post("/api/admin/posts", requireAuth, async (req, res) => {
     try {
       const { categoryIds = [], tagIds = [], ...postData } = req.body;
+      if (postData.publishedAt) postData.publishedAt = new Date(postData.publishedAt);
       const parsed = insertPostSchema.parse(postData);
-      if (parsed.publishedAt) (parsed as any).publishedAt = new Date(parsed.publishedAt as any);
       const post = await storage.createPost(parsed, categoryIds, tagIds);
       res.json(post);
     } catch (error: any) {
@@ -142,8 +142,8 @@ export async function registerRoutes(
   app.put("/api/admin/posts/:id", requireAuth, async (req, res) => {
     try {
       const { categoryIds = [], tagIds = [], ...postData } = req.body;
+      if (postData.publishedAt) postData.publishedAt = new Date(postData.publishedAt);
       const parsed = insertPostSchema.partial().parse(postData);
-      if (parsed.publishedAt) (parsed as any).publishedAt = new Date(parsed.publishedAt as any);
       const post = await storage.updatePost(parseInt(req.params.id), parsed, categoryIds, tagIds);
       res.json(post);
     } catch (error: any) {
