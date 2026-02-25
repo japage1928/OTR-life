@@ -11,23 +11,39 @@ export function serveStatic(app: Express) {
     );
   }
 
-  app.use(express.static(distPath));
-
   const templatePath = path.resolve(distPath, "index.html");
   const template = fs.readFileSync(templatePath, "utf-8");
 
-  app.use("/{*path}", async (req, res) => {
+  const ssrHandler = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
     try {
       const ssr = await getSSRContent(req.path);
       if (ssr) {
         const html = injectSSR(template, ssr);
         res.status(200).set({ "Content-Type": "text/html" }).send(html);
       } else {
-        res.sendFile(templatePath);
+        next();
       }
     } catch (e) {
       console.error("SSR error:", e);
-      res.sendFile(templatePath);
+      next();
     }
+  };
+
+  app.get("/", ssrHandler);
+  app.get("/blog", ssrHandler);
+  app.get("/post/:slug", ssrHandler);
+  app.get("/category/:slug", ssrHandler);
+  app.get("/tag/:slug", ssrHandler);
+  app.get("/about", ssrHandler);
+  app.get("/contact", ssrHandler);
+  app.get("/tools", ssrHandler);
+  app.get("/privacy", ssrHandler);
+  app.get("/affiliate-disclosure", ssrHandler);
+  app.get("/search", ssrHandler);
+
+  app.use(express.static(distPath));
+
+  app.use("/{*path}", (_req, res) => {
+    res.sendFile(templatePath);
   });
 }
