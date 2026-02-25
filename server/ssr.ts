@@ -2,7 +2,20 @@ import { storage } from "./storage";
 import { marked } from "marked";
 import type { PostWithRelations, Category, Tag } from "@shared/schema";
 
+marked.setOptions({ async: false });
+
 const SITE_NAME = "TruckerTools";
+
+function sanitizeHtml(html: string): string {
+  return html
+    .replace(/<script[\s>][\s\S]*?<\/script>/gi, "")
+    .replace(/on\w+\s*=\s*["'][^"']*["']/gi, "")
+    .replace(/on\w+\s*=\s*\S+/gi, "");
+}
+
+function safeJsonLd(obj: object): string {
+  return JSON.stringify(obj).replace(/<\//g, "<\\/").replace(/<!--/g, "<\\!--");
+}
 
 function getBaseUrl(): string {
   return process.env.SITE_URL || "https://trucking-blog-tools.replit.app";
@@ -60,7 +73,7 @@ function buildHead(meta: {
   lines.push(`<meta name="twitter:title" content="${escapeHtml(meta.title)}" />`);
   lines.push(`<meta name="twitter:description" content="${escapeHtml(meta.description)}" />`);
   if (meta.jsonLd) {
-    lines.push(`<script type="application/ld+json">${JSON.stringify(meta.jsonLd)}</script>`);
+    lines.push(`<script type="application/ld+json">${safeJsonLd(meta.jsonLd)}</script>`);
   }
   return lines.join("\n    ");
 }
@@ -147,7 +160,7 @@ async function renderPostPage(slug: string, baseUrl: string): Promise<{ head: st
   const post = await storage.getPostBySlug(slug);
   if (!post) return null;
 
-  const contentHtml = await marked.parse(post.contentMd);
+  const contentHtml = sanitizeHtml(await marked.parse(post.contentMd));
   const description = post.metaDescription || post.excerpt || truncate(post.contentMd.replace(/[#*_`\[\]]/g, ""), 160);
 
   const head = buildHead({

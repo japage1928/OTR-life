@@ -4,18 +4,29 @@
 A mobile-first trucking blog with a protected admin CMS. Built with Express + React (Vite), PostgreSQL, Tailwind CSS.
 
 ## Recent Changes
+- 2026-02-25: Added SSR for all public pages (SEO: title, meta, OG, JSON-LD, full content in HTML)
 - 2026-02-22: Initial build - schema, frontend pages, backend API, seed data, admin CMS
 
 ## Architecture
 - **Frontend**: React 18 with wouter routing, TanStack Query, Tailwind CSS, shadcn/ui
 - **Backend**: Express.js with express-session (pg-backed), bcryptjs auth
 - **Database**: PostgreSQL via Drizzle ORM
-- **Rendering**: Client-side SPA (SSR-compatible structure for future migration)
+- **Rendering**: Server-side rendered (SSR) for public pages in production; React SPA hydrates on client
+
+## SSR (Server-Side Rendering)
+- `server/ssr.ts` - SSR engine: generates full HTML with SEO meta tags + content for public pages
+- `server/static.ts` - Production: registers SSR route handlers BEFORE express.static middleware
+- SSR pages: `/`, `/blog`, `/post/:slug`, `/category/:slug`, `/tag/:slug`, `/about`, `/contact`, `/tools`, `/privacy`, `/affiliate-disclosure`, `/search`
+- Admin pages are NOT SSR'd (SPA only)
+- SSR uses `marked` library to convert markdown to HTML server-side
+- If SSR fails, falls through to SPA shell gracefully
 
 ## Key Files
 - `shared/schema.ts` - Database schema (users, posts, categories, tags, links, post_categories, post_tags)
 - `server/routes.ts` - All API routes (public + admin)
 - `server/storage.ts` - Database storage layer (DatabaseStorage)
+- `server/ssr.ts` - SSR content generation (SEO meta tags, HTML rendering)
+- `server/static.ts` - Production static serving with SSR integration
 - `server/seed.ts` - Seed data (admin user, categories, tags, sample posts)
 - `client/src/App.tsx` - Frontend router with all routes
 
