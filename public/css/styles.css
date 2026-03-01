@@ -403,6 +403,13 @@ h3 {
   color: #ffffff;
 }
 
+.btn-sm {
+  min-height: 36px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.88rem;
+  border-radius: 9px;
+}
+
 .muted {
   color: var(--muted);
 }
@@ -621,6 +628,36 @@ td {
   .home-hero {
     padding-top: 2.3rem;
     padding-bottom: 2.3rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .col-hide-sm {
+    display: none;
+  }
+
+  .chip-sm {
+    min-height: 32px;
+    font-size: 0.78rem;
+    padding: 0.15rem 0.5rem;
+  }
+
+  .actions-sm {
+    flex-wrap: nowrap;
+  }
+
+  .admin-panel {
+    padding: 0.85rem 0.75rem;
+  }
+
+  .table-wrap {
+    margin-left: -0.75rem;
+    margin-right: -0.75rem;
+  }
+
+  th,
+  td {
+    padding: 0.6rem 0.35rem;
   }
 }
 
