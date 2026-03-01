@@ -9,7 +9,7 @@ import adminRoutes from "./routes/admin";
 import { runSeed } from "./seed";
 
 const app = express();
-const PORT = Number.parseInt(process.env.PORT || "3000", 10);
+const PORT = Number.parseInt(process.env.PORT || "5000", 10);
 
 app.disable("x-powered-by");
 app.set("trust proxy", 1);

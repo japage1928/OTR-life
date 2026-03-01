@@ -21,7 +21,7 @@
   <% } %>
   <link rel="stylesheet" href="/css/styles.css" />
 </head>
-<body>
+<body class="public-body">
   <header class="site-header">
     <div class="container nav-row">
       <a class="brand" href="/">OTR Life</a>
@@ -30,7 +30,6 @@
         <a href="/posts" class="<%= currentPath.startsWith('/post') || currentPath === '/posts' ? 'active' : '' %>">Posts</a>
         <a href="/about" class="<%= currentPath === '/about' ? 'active' : '' %>">About</a>
         <a href="/contact" class="<%= currentPath === '/contact' ? 'active' : '' %>">Contact</a>
-        <a href="/admin/login">Admin</a>
       </nav>
     </div>
   </header>
@@ -40,10 +39,24 @@
   </main>
 
   <footer class="site-footer">
-    <div class="container footer-inner">
-      <p>&copy; 2025 OTR Life. Built for drivers, by drivers.</p>
-      <p><a href="/robots.txt">robots.txt</a> | <a href="/sitemap.xml">sitemap.xml</a></p>
+    <div class="container footer-grid">
+      <div>
+        <h3>OTR Life</h3>
+        <p class="muted">A trucker-first publication for practical life on the road.</p>
+      </div>
+      <div>
+        <h4>Explore</h4>
+        <a href="/about">About</a>
+        <a href="/contact">Contact</a>
+        <a href="/posts">Start Here</a>
+      </div>
+      <div>
+        <h4>Legal</h4>
+        <a href="/robots.txt">Robots</a>
+        <a href="/sitemap.xml">Sitemap</a>
+      </div>
     </div>
+    <p class="footer-copy">&copy; 2026 OTR Life. All rights reserved.</p>
   </footer>
 </body>
 </html>
