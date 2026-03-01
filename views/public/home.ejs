@@ -1,0 +1,39 @@
+<section class="hero card">
+  <h1>OTR Life</h1>
+  <p style="font-size: 1.1rem; margin-bottom: 2rem;">Dark, bunk-friendly reading for drivers. Practical gear advice, money tips, and road-tested routines—no noise, just what matters when you're living in the cab.</p>
+  <a class="btn" href="/posts">Read the Latest</a>
+</section>
+
+<section class="panel">
+  <h2>Featured Categories</h2>
+  <div class="chip-row">
+    <% featuredCategories.forEach((cat) => { %>
+      <a class="chip" href="/category/<%= cat.slug %>"><strong><%= cat.name %></strong> <span class="muted">(<%= cat.post_count %>)</span></a>
+    <% }) %>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Latest Posts</h2>
+  <div class="post-grid">
+    <% latestPosts.forEach((post) => { %>
+      <article class="card post-card">
+        <% if (post.cover_image) { %>
+          <img src="<%= post.cover_image %>" alt="<%= post.title %>" class="cover" />
+        <% } %>
+        <h3><a href="/post/<%= post.slug %>"><%= post.title %></a></h3>
+        <p class="muted" style="margin: 0.5rem 0 0.75rem 0;">
+          <%= formatDate(post.published_at) %>
+          <% if (post.category_name) { %>
+            / <a href="/category/<%= post.category_slug %>" class="chip"><%= post.category_name %></a>
+          <% } %>
+        </p>
+        <p><%= post.excerpt %></p>
+        <a href="/post/<%= post.slug %>" class="btn btn-outline" style="display: inline-block; margin-top: 0.5rem;">Read More</a>
+      </article>
+    <% }) %>
+  </div>
+  <div class="center" style="margin-top: 2rem;">
+    <a class="btn" href="/posts">View All Posts</a>
+  </div>
+</section>

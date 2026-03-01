@@ -1,0 +1,27 @@
+<section class="admin-panel">
+  <h1>Contact Messages</h1>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Status</th><th>From</th><th>Subject</th><th>Date</th><th>Actions</th></tr></thead>
+      <tbody>
+      <% messages.forEach((m) => { %>
+        <tr>
+          <td><span class="chip <%= m.is_read ? '' : 'chip-alert' %>"><%= m.is_read ? 'Read' : 'Unread' %></span></td>
+          <td><strong><%= m.name %></strong><br /><span class="muted"><%= m.email %></span></td>
+          <td><%= m.subject %></td>
+          <td><%= formatDate(m.created_at) %></td>
+          <td class="actions">
+            <a class="btn btn-outline" href="/admin/messages/<%= m.id %>">View</a>
+            <form method="post" action="/admin/messages/<%= m.id %>/toggle-read">
+              <button class="btn btn-outline" type="submit"><%= m.is_read ? 'Mark Unread' : 'Mark Read' %></button>
+            </form>
+            <form method="post" action="/admin/messages/<%= m.id %>/delete" data-confirm="Delete this message?">
+              <button class="btn btn-danger" type="submit">Delete</button>
+            </form>
+          </td>
+        </tr>
+      <% }) %>
+      </tbody>
+    </table>
+  </div>
+</section>

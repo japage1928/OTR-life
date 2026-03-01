@@ -1,0 +1,40 @@
+<section class="admin-panel">
+  <div class="row between">
+    <h1>Posts</h1>
+    <a class="btn" href="/admin/posts/new">New Post</a>
+  </div>
+
+  <form class="row gap" method="get" action="/admin/posts">
+    <input type="text" name="q" value="<%= filters.q %>" placeholder="Search title/slug/excerpt" />
+    <select name="status">
+      <option value="">All statuses</option>
+      <option value="draft" <%= filters.status === 'draft' ? 'selected' : '' %>>Draft</option>
+      <option value="published" <%= filters.status === 'published' ? 'selected' : '' %>>Published</option>
+    </select>
+    <button class="btn btn-outline" type="submit">Filter</button>
+  </form>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Title</th><th>Status</th><th>Category</th><th>Updated</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+      <% posts.forEach((post) => { %>
+        <tr>
+          <td><strong><%= post.title %></strong><br /><span class="muted">/<%= post.slug %></span></td>
+          <td><span class="chip"><%= post.status %></span></td>
+          <td><%= post.category_name || '-' %></td>
+          <td><%= formatDate(post.updated_at) %></td>
+          <td class="actions">
+            <a class="btn btn-outline" href="/admin/posts/<%= post.id %>/edit">Edit</a>
+            <form method="post" action="/admin/posts/<%= post.id %>/delete" data-confirm="Delete this post?">
+              <button type="submit" class="btn btn-danger">Delete</button>
+            </form>
+          </td>
+        </tr>
+      <% }) %>
+      </tbody>
+    </table>
+  </div>
+</section>

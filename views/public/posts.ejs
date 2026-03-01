@@ -1,0 +1,30 @@
+<section class="panel">
+  <h1>All Posts</h1>
+  <p class="muted">Bunk-friendly reading, categorized for easy browsing.</p>
+</section>
+
+<div class="stack">
+  <% posts.forEach((post) => { %>
+    <article class="card">
+      <h2><a href="/post/<%= post.slug %>"><%= post.title %></a></h2>
+      <p class="muted" style="margin: 0.3rem 0 0.7rem 0;">
+        <%= formatDate(post.published_at) %>
+        <% if (post.category_name) { %>
+          / <a href="/category/<%= post.category_slug %>"><%= post.category_name %></a>
+        <% } %>
+      </p>
+      <p style="margin-bottom: 0.75rem;"><%= post.excerpt %></p>
+      <a href="/post/<%= post.slug %>" class="btn btn-outline" style="display: inline-block;">Read →</a>
+    </article>
+  <% }) %>
+</div>
+
+<div class="pagination">
+  <% if (pagination.page > 1) { %>
+    <a class="btn btn-outline" href="/posts?page=<%= pagination.page - 1 %>">← Previous</a>
+  <% } %>
+  <span class="muted">Page <%= pagination.page %> of <%= pagination.totalPages %></span>
+  <% if (pagination.page < pagination.totalPages) { %>
+    <a class="btn btn-outline" href="/posts?page=<%= pagination.page + 1 %>">Next →</a>
+  <% } %>
+</div>

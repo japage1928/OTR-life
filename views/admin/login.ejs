@@ -1,0 +1,21 @@
+<section class="admin-panel narrow">
+  <h1>Admin Login</h1>
+  <% if (errors.length) { %>
+    <div class="alert error">
+      <ul>
+      <% errors.forEach((error) => { %>
+        <li><%= error %></li>
+      <% }) %>
+      </ul>
+    </div>
+  <% } %>
+  <form class="stack" method="post" action="/admin/login">
+    <label>Username
+      <input type="text" name="username" required />
+    </label>
+    <label>Password
+      <input type="password" name="password" required />
+    </label>
+    <button class="btn" type="submit">Sign In</button>
+  </form>
+</section>

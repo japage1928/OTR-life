@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title><%= pageTitle || "OTR Life" %></title>
+  <meta name="description" content="<%= metaDescription || 'OTR Life: Practical guides for truck drivers' %>" />
+  <% if (canonicalUrl) { %><link rel="canonical" href="<%= canonicalUrl %>" /><% } %>
+  <% if (og && Object.keys(og).length) { %>
+    <% if (og.title) { %><meta property="og:title" content="<%= og.title %>" /><% } %>
+    <% if (og.description) { %><meta property="og:description" content="<%= og.description %>" /><% } %>
+    <% if (og.type) { %><meta property="og:type" content="<%= og.type %>" /><% } %>
+    <% if (og.url) { %><meta property="og:url" content="<%= og.url %>" /><% } %>
+    <% if (og.image) { %><meta property="og:image" content="<%= og.image %>" /><% } %>
+  <% } %>
+  <% if (twitter && Object.keys(twitter).length) { %>
+    <% if (twitter.card) { %><meta name="twitter:card" content="<%= twitter.card %>" /><% } %>
+    <% if (twitter.title) { %><meta name="twitter:title" content="<%= twitter.title %>" /><% } %>
+    <% if (twitter.description) { %><meta name="twitter:description" content="<%= twitter.description %>" /><% } %>
+    <% if (twitter.image) { %><meta name="twitter:image" content="<%= twitter.image %>" /><% } %>
+  <% } %>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container nav-row">
+      <a class="brand" href="/">OTR Life</a>
+      <nav class="nav-links">
+        <a href="/" class="<%= currentPath === '/' ? 'active' : '' %>">Home</a>
+        <a href="/posts" class="<%= currentPath.startsWith('/post') || currentPath === '/posts' ? 'active' : '' %>">Posts</a>
+        <a href="/about" class="<%= currentPath === '/about' ? 'active' : '' %>">About</a>
+        <a href="/contact" class="<%= currentPath === '/contact' ? 'active' : '' %>">Contact</a>
+        <a href="/admin/login">Admin</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container reading-shell">
+    <%- body %>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p>&copy; 2025 OTR Life. Built for drivers, by drivers.</p>
+      <p><a href="/robots.txt">robots.txt</a> | <a href="/sitemap.xml">sitemap.xml</a></p>
+    </div>
+  </footer>
+</body>
+</html>

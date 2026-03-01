@@ -1,0 +1,20 @@
+<section class="panel">
+  <p style="margin-bottom: 0.5rem;"><a href="/posts" class="btn btn-outline" style="display: inline-block; font-size: 0.9rem; padding: 0.5rem 0.75rem;">← Back to Posts</a></p>
+  <h1 style="margin-top: 0.5rem;"><%= category.name %></h1>
+  <p class="muted">All posts in this category</p>
+  
+  <% if (!posts.length) { %>
+    <p class="alert" style="margin-top: 2rem;">No published posts in <strong><%= category.name %></strong> yet. Check back soon!</p>
+  <% } else { %>
+    <div class="stack" style="margin-top: 2rem;">
+      <% posts.forEach((post) => { %>
+        <article class="card">
+          <h2 style="margin-top: 0;"><a href="/post/<%= post.slug %>"><%= post.title %></a></h2>
+          <p class="muted" style="margin: 0.3rem 0 0.7rem 0;"><%= formatDate(post.published_at) %></p>
+          <p style="margin-bottom: 0.75rem;"><%= post.excerpt %></p>
+          <a href="/post/<%= post.slug %>" class="btn btn-outline" style="display: inline-block; font-size: 0.9rem;">Read →</a>
+        </article>
+      <% }) %>
+    </div>
+  <% } %>
+</section>

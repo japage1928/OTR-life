@@ -1,0 +1,68 @@
+<section class="admin-panel">
+  <h1><%= post && post.id ? 'Edit Post' : 'New Post' %></h1>
+
+  <% if (errors.length) { %>
+    <div class="alert error">
+      <ul>
+      <% errors.forEach((error) => { %><li><%= error %></li><% }) %>
+      </ul>
+    </div>
+  <% } %>
+
+  <form class="stack" method="post" action="<%= post && post.id ? '/admin/posts/' + post.id + '/edit' : '/admin/posts/new' %>">
+    <label>Title
+      <input id="title-input" type="text" name="title" value="<%= post?.title || '' %>" required />
+    </label>
+    <label>Slug
+      <input id="slug-input" type="text" name="slug" value="<%= post?.slug || '' %>" />
+    </label>
+    <label>Excerpt
+      <textarea name="excerpt" rows="3" required><%= post?.excerpt || '' %></textarea>
+    </label>
+    <label>Content (Markdown)
+      <textarea name="content_md" rows="14" required><%= post?.content_md || '' %></textarea>
+    </label>
+    <label>Cover image URL
+      <input type="url" name="cover_image" value="<%= post?.cover_image || '' %>" />
+    </label>
+
+    <div class="row gap">
+      <label>Status
+        <select name="status">
+          <option value="draft" <%= (post?.status || 'draft') === 'draft' ? 'selected' : '' %>>Draft</option>
+          <option value="published" <%= post?.status === 'published' ? 'selected' : '' %>>Published</option>
+        </select>
+      </label>
+      <label>Publish date (ISO)
+        <input type="text" name="published_at" value="<%= post?.published_at || '' %>" placeholder="2026-03-01T16:00:00.000Z" />
+      </label>
+    </div>
+
+    <label>Category
+      <select name="category_id">
+        <option value="">No category</option>
+        <% categories.forEach((cat) => { %>
+          <option value="<%= cat.id %>" <%= Number(post?.category_id) === cat.id ? 'selected' : '' %>><%= cat.name %></option>
+        <% }) %>
+      </select>
+    </label>
+
+    <label>Tags (multi-select)
+      <select name="tag_ids" multiple size="8">
+        <% tags.forEach((tag) => { %>
+          <option value="<%= tag.id %>" <%= selectedTagIds.includes(tag.id) ? 'selected' : '' %>><%= tag.name %></option>
+        <% }) %>
+      </select>
+    </label>
+
+    <h3>SEO</h3>
+    <label>Meta Title
+      <input type="text" name="meta_title" value="<%= post?.meta_title || '' %>" />
+    </label>
+    <label>Meta Description
+      <textarea name="meta_description" rows="3"><%= post?.meta_description || '' %></textarea>
+    </label>
+
+    <button class="btn" type="submit">Save Post</button>
+  </form>
+</section>

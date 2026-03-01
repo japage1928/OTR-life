@@ -1,0 +1,10 @@
+<section class="admin-panel">
+  <div class="row between">
+    <h1>Message from <%= message.name %></h1>
+    <a class="btn btn-outline" href="/admin/messages">Back</a>
+  </div>
+  <p class="muted"><strong>Email:</strong> <%= message.email %></p>
+  <p class="muted"><strong>Date:</strong> <%= formatDate(message.created_at) %></p>
+  <h2><%= message.subject %></h2>
+  <article class="card"><pre class="message-body"><%= message.body %></pre></article>
+</section>

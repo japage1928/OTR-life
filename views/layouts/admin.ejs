@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title><%= pageTitle || siteName %></title>
+  <meta name="description" content="<%= metaDescription || '' %>" />
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body class="admin-body">
+  <div class="admin-shell">
+    <aside class="admin-sidebar">
+      <a class="brand" href="/admin">Admin</a>
+      <nav>
+        <a href="/admin" class="<%= currentPath === '/' ? 'active' : '' %>">Overview</a>
+        <a href="/admin/posts" class="<%= currentPath.startsWith('/posts') ? 'active' : '' %>">Posts</a>
+        <a href="/admin/categories" class="<%= currentPath.startsWith('/categories') ? 'active' : '' %>">Categories</a>
+        <a href="/admin/tags" class="<%= currentPath.startsWith('/tags') ? 'active' : '' %>">Tags</a>
+        <a href="/admin/messages" class="<%= currentPath.startsWith('/messages') ? 'active' : '' %>">Messages</a>
+      </nav>
+      <form method="post" action="/admin/logout">
+        <button type="submit" class="btn btn-outline w-full">Logout</button>
+      </form>
+    </aside>
+    <main class="admin-main">
+      <%- body %>
+    </main>
+  </div>
+  <script src="/js/admin.js" defer></script>
+</body>
+</html>
