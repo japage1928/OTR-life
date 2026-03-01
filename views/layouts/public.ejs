@@ -5,19 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title><%= pageTitle || (siteTitle || "OTR Life") %></title>
   <meta name="description" content="<%= metaDescription || siteTagline || 'OTR Life: Practical guides for truck drivers' %>" />
-  <% if (canonicalUrl) { %><link rel="canonical" href="<%= canonicalUrl %>" /><% } %>
-  <% if (og && Object.keys(og).length) { %>
-    <% if (og.title) { %><meta property="og:title" content="<%= og.title %>" /><% } %>
-    <% if (og.description) { %><meta property="og:description" content="<%= og.description %>" /><% } %>
-    <% if (og.type) { %><meta property="og:type" content="<%= og.type %>" /><% } %>
-    <% if (og.url) { %><meta property="og:url" content="<%= og.url %>" /><% } %>
-    <% if (og.image) { %><meta property="og:image" content="<%= og.image %>" /><% } %>
+  <% if (locals.canonicalUrl) { %><link rel="canonical" href="<%= canonicalUrl %>" /><% } %>
+  <% if (locals.og && Object.keys(locals.og).length) { %>
+    <% if (locals.og.title) { %><meta property="og:title" content="<%= locals.og.title %>" /><% } %>
+    <% if (locals.og.description) { %><meta property="og:description" content="<%= locals.og.description %>" /><% } %>
+    <% if (locals.og.type) { %><meta property="og:type" content="<%= locals.og.type %>" /><% } %>
+    <% if (locals.og.url) { %><meta property="og:url" content="<%= locals.og.url %>" /><% } %>
+    <% if (locals.og.image) { %><meta property="og:image" content="<%= locals.og.image %>" /><% } %>
   <% } %>
-  <% if (twitter && Object.keys(twitter).length) { %>
-    <% if (twitter.card) { %><meta name="twitter:card" content="<%= twitter.card %>" /><% } %>
-    <% if (twitter.title) { %><meta name="twitter:title" content="<%= twitter.title %>" /><% } %>
-    <% if (twitter.description) { %><meta name="twitter:description" content="<%= twitter.description %>" /><% } %>
-    <% if (twitter.image) { %><meta name="twitter:image" content="<%= twitter.image %>" /><% } %>
+  <% if (locals.twitter && Object.keys(locals.twitter).length) { %>
+    <% if (locals.twitter.card) { %><meta name="twitter:card" content="<%= locals.twitter.card %>" /><% } %>
+    <% if (locals.twitter.title) { %><meta name="twitter:title" content="<%= locals.twitter.title %>" /><% } %>
+    <% if (locals.twitter.description) { %><meta name="twitter:description" content="<%= locals.twitter.description %>" /><% } %>
+    <% if (locals.twitter.image) { %><meta name="twitter:image" content="<%= locals.twitter.image %>" /><% } %>
   <% } %>
   <link rel="stylesheet" href="/css/styles.css" />
 </head>
