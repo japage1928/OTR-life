@@ -45,3 +45,4 @@ externalPort = 80
 deploymentTarget = "vm"
 run = ["node", "dist/server/index.js"]
 build = ["npm", "run", "build"]
+publicDir = "public"
