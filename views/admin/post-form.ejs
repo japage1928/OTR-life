@@ -38,22 +38,36 @@
       </label>
     </div>
 
-    <label>Category
-      <select name="category_id">
-        <option value="">No category</option>
-        <% categories.forEach((cat) => { %>
-          <option value="<%= cat.id %>" <%= Number(post?.category_id) === cat.id ? 'selected' : '' %>><%= cat.name %></option>
-        <% }) %>
-      </select>
-    </label>
+    <div>
+      <label>Category
+        <select id="category-select" name="category_id">
+          <option value="">No category</option>
+          <% categories.forEach((cat) => { %>
+            <option value="<%= cat.id %>" <%= Number(post?.category_id) === cat.id ? 'selected' : '' %>><%= cat.name %></option>
+          <% }) %>
+        </select>
+      </label>
+      <div class="quick-add-row" style="display:flex;gap:.5rem;margin-top:.4rem;align-items:center;">
+        <input id="new-category-input" type="text" placeholder="New category name" style="flex:1;" />
+        <button type="button" id="add-category-btn" class="btn btn-sm">+ Add</button>
+        <span id="category-msg" style="font-size:.85em;"></span>
+      </div>
+    </div>
 
-    <label>Tags (multi-select)
-      <select name="tag_ids" multiple size="8">
-        <% tags.forEach((tag) => { %>
-          <option value="<%= tag.id %>" <%= selectedTagIds.includes(tag.id) ? 'selected' : '' %>><%= tag.name %></option>
-        <% }) %>
-      </select>
-    </label>
+    <div>
+      <label>Tags (multi-select)
+        <select id="tags-select" name="tag_ids" multiple size="8">
+          <% tags.forEach((tag) => { %>
+            <option value="<%= tag.id %>" <%= selectedTagIds.includes(tag.id) ? 'selected' : '' %>><%= tag.name %></option>
+          <% }) %>
+        </select>
+      </label>
+      <div class="quick-add-row" style="display:flex;gap:.5rem;margin-top:.4rem;align-items:center;">
+        <input id="new-tag-input" type="text" placeholder="New tag name" style="flex:1;" />
+        <button type="button" id="add-tag-btn" class="btn btn-sm">+ Add</button>
+        <span id="tag-msg" style="font-size:.85em;"></span>
+      </div>
+    </div>
 
     <h3>SEO</h3>
     <label>Meta Title
@@ -66,3 +80,77 @@
     <button class="btn" type="submit">Save Post</button>
   </form>
 </section>
+
+<script>
+(function () {
+  function showMsg(el, text, isError) {
+    el.textContent = text;
+    el.style.color = isError ? 'var(--color-danger, #e55)' : 'var(--color-success, #5a5)';
+    setTimeout(function () { el.textContent = ''; }, 3000);
+  }
+
+  document.getElementById('add-category-btn').addEventListener('click', async function () {
+    const input = document.getElementById('new-category-input');
+    const msg = document.getElementById('category-msg');
+    const name = input.value.trim();
+    if (!name) { showMsg(msg, 'Enter a name.', true); return; }
+
+    this.disabled = true;
+    try {
+      const res = await fetch('/admin/api/categories/quick-create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      const data = await res.json();
+      if (!res.ok) { showMsg(msg, data.error || 'Error.', true); return; }
+
+      const select = document.getElementById('category-select');
+      const opt = new Option(data.name, data.id, true, true);
+      select.appendChild(opt);
+      input.value = '';
+      showMsg(msg, '"' + data.name + '" added and selected.', false);
+    } catch (e) {
+      showMsg(msg, 'Network error.', true);
+    } finally {
+      this.disabled = false;
+    }
+  });
+
+  document.getElementById('new-category-input').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('add-category-btn').click(); }
+  });
+
+  document.getElementById('add-tag-btn').addEventListener('click', async function () {
+    const input = document.getElementById('new-tag-input');
+    const msg = document.getElementById('tag-msg');
+    const name = input.value.trim();
+    if (!name) { showMsg(msg, 'Enter a name.', true); return; }
+
+    this.disabled = true;
+    try {
+      const res = await fetch('/admin/api/tags/quick-create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      const data = await res.json();
+      if (!res.ok) { showMsg(msg, data.error || 'Error.', true); return; }
+
+      const select = document.getElementById('tags-select');
+      const opt = new Option(data.name, data.id, true, true);
+      select.appendChild(opt);
+      input.value = '';
+      showMsg(msg, '"' + data.name + '" added and selected.', false);
+    } catch (e) {
+      showMsg(msg, 'Network error.', true);
+    } finally {
+      this.disabled = false;
+    }
+  });
+
+  document.getElementById('new-tag-input').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('add-tag-btn').click(); }
+  });
+})();
+</script>

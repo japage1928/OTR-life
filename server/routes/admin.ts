@@ -444,6 +444,38 @@ router.post("/posts/:id/delete", (req, res, next) => {
   }
 });
 
+router.post("/api/categories/quick-create", (req, res, next) => {
+  try {
+    const name = getString(req.body.name);
+    if (!name) {
+      return res.status(400).json({ error: "Category name is required." });
+    }
+    const db = getDb();
+    const slug = ensureUniqueSlug("categories", getString(req.body.slug), name);
+    const result = db.prepare("INSERT INTO categories (name, slug) VALUES (?, ?)").run(name, slug);
+    const id = Number(result.lastInsertRowid);
+    return res.json({ id, name, slug });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/api/tags/quick-create", (req, res, next) => {
+  try {
+    const name = getString(req.body.name);
+    if (!name) {
+      return res.status(400).json({ error: "Tag name is required." });
+    }
+    const db = getDb();
+    const slug = ensureUniqueSlug("tags", getString(req.body.slug), name);
+    const result = db.prepare("INSERT INTO tags (name, slug) VALUES (?, ?)").run(name, slug);
+    const id = Number(result.lastInsertRowid);
+    return res.json({ id, name, slug });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/categories", (_req, res, next) => {
   try {
     res.render("admin/categories", {
