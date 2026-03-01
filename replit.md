@@ -8,7 +8,7 @@ A mobile-first trucking blog and tools website built for over-the-road drivers.
 - **Language**: TypeScript (compiled via `tsx` for dev, `tsc` for prod)
 - **Framework**: Express.js 4
 - **Templating**: EJS with express-ejs-layouts
-- **Database**: SQLite via better-sqlite3 (file: `data/trucking-blog-tools.db`)
+- **Database**: PostgreSQL via Replit's managed Neon-backed database (persistent across deployments)
 - **Auth**: bcrypt password hashing, express-session
 - **Security**: helmet, express-rate-limit, express-validator
 

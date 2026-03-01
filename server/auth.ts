@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import bcrypt from "bcrypt";
-import { getDb } from "./db";
+import { getPool } from "./db";
 
 declare module "express-session" {
   interface SessionData {
@@ -24,16 +24,18 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   return next();
 }
 
-export function getAdminByUsername(username: string) {
-  const db = getDb();
-  return db
-    .prepare("SELECT id, username, password_hash FROM users WHERE username = ? LIMIT 1")
-    .get(username) as { id: number; username: string; password_hash: string } | undefined;
+export async function getAdminByUsername(username: string): Promise<{ id: number; username: string; password_hash: string } | undefined> {
+  const result = await getPool().query(
+    "SELECT id, username, password_hash FROM users WHERE username = $1 LIMIT 1",
+    [username],
+  );
+  return result.rows[0];
 }
 
-export function getAdminById(id: number) {
-  const db = getDb();
-  return db
-    .prepare("SELECT id, username, password_hash FROM users WHERE id = ? LIMIT 1")
-    .get(id) as { id: number; username: string; password_hash: string } | undefined;
+export async function getAdminById(id: number): Promise<{ id: number; username: string; password_hash: string } | undefined> {
+  const result = await getPool().query(
+    "SELECT id, username, password_hash FROM users WHERE id = $1 LIMIT 1",
+    [id],
+  );
+  return result.rows[0];
 }

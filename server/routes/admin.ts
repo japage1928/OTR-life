@@ -4,7 +4,7 @@ import {
   adminStats,
   createPost,
   ensureUniqueSlug,
-  getDb,
+  getPool,
   getPostById,
   getSiteSettings,
   listCategories,
@@ -27,12 +27,8 @@ function cleanInlineText(value: unknown): string {
 }
 
 function getSuccessMessage(code: string): string {
-  if (code === "settings-saved") {
-    return "Settings updated successfully.";
-  }
-  if (code === "password-changed") {
-    return "Password changed successfully. Please sign in again.";
-  }
+  if (code === "settings-saved") return "Settings updated successfully.";
+  if (code === "password-changed") return "Password changed successfully. Please sign in again.";
   return "";
 }
 
@@ -53,7 +49,7 @@ async function parsePostInput(body: Record<string, unknown>, existingId?: number
   const publishDate = getString(body.published_at);
 
   const categoryIdRaw = Number.parseInt(getString(body.category_id), 10);
-  const categoryId = Number.isInteger(categoryIdRaw) ? categoryIdRaw : null;
+  const categoryId = Number.isInteger(categoryIdRaw) && categoryIdRaw > 0 ? categoryIdRaw : null;
 
   const input: PostInput = {
     title,
@@ -92,9 +88,8 @@ router.post("/login", async (req, res, next) => {
   try {
     const username = getString(req.body.username);
     const password = String(req.body.password || "");
-
-    const user = getAdminByUsername(username);
-    if (!user) {
+    const user = await getAdminByUsername(username);
+    if (!user || !verifyPassword(password, user.password_hash)) {
       return res.status(401).render("admin/login", {
         pageTitle: "Admin Login | OTR Life",
         metaDescription: "Admin login",
@@ -102,17 +97,6 @@ router.post("/login", async (req, res, next) => {
         success: "",
       });
     }
-
-    const ok = verifyPassword(password, user.password_hash);
-    if (!ok) {
-      return res.status(401).render("admin/login", {
-        pageTitle: "Admin Login | OTR Life",
-        metaDescription: "Admin login",
-        errors: ["Invalid username or password."],
-        success: "",
-      });
-    }
-
     req.session.userId = user.id;
     req.session.username = user.username;
     return res.redirect("/admin");
@@ -129,24 +113,24 @@ router.post("/logout", (req, res) => {
 
 router.use(requireAdmin);
 
-router.get("/", (_req, res, next) => {
+router.get("/", async (_req, res, next) => {
   try {
     res.render("admin/dashboard", {
       pageTitle: "Dashboard | OTR Life",
       metaDescription: "Admin dashboard",
-      stats: adminStats(),
+      stats: await adminStats(),
     });
   } catch (err) {
     next(err);
   }
 });
 
-router.get("/settings", (_req, res, next) => {
+router.get("/settings", async (_req, res, next) => {
   try {
     res.render("admin/settings", {
       pageTitle: "Site Settings | OTR Life",
       metaDescription: "Manage site settings",
-      settings: getSiteSettings(),
+      settings: await getSiteSettings(),
       errors: [] as string[],
       success: getSuccessMessage(getString(_req.query.success)),
     });
@@ -155,7 +139,7 @@ router.get("/settings", (_req, res, next) => {
   }
 });
 
-router.post("/settings", (req, res, next) => {
+router.post("/settings", async (req, res, next) => {
   try {
     const site_title = cleanInlineText(req.body.site_title);
     const tagline = cleanInlineText(req.body.tagline);
@@ -164,15 +148,9 @@ router.post("/settings", (req, res, next) => {
     const about_image_url = getString(req.body.about_image_url);
 
     const errors: string[] = [];
-    if (!site_title) {
-      errors.push("Site title is required.");
-    }
-    if (!about_title) {
-      errors.push("About title is required.");
-    }
-    if (!about_body_md) {
-      errors.push("About body is required.");
-    }
+    if (!site_title) errors.push("Site title is required.");
+    if (!about_title) errors.push("About title is required.");
+    if (!about_body_md) errors.push("About body is required.");
     if (about_image_url) {
       try {
         const parsed = new URL(about_image_url);
@@ -188,28 +166,13 @@ router.post("/settings", (req, res, next) => {
       return res.status(400).render("admin/settings", {
         pageTitle: "Site Settings | OTR Life",
         metaDescription: "Manage site settings",
-        settings: {
-          id: 1,
-          site_title,
-          tagline,
-          about_title,
-          about_body_md,
-          about_image_url,
-          updated_at: null,
-        },
+        settings: { id: 1, site_title, tagline, about_title, about_body_md, about_image_url, updated_at: null },
         errors,
         success: "",
       });
     }
 
-    updateSiteSettings({
-      site_title,
-      tagline,
-      about_title,
-      about_body_md,
-      about_image_url,
-    });
-
+    await updateSiteSettings({ site_title, tagline, about_title, about_body_md, about_image_url });
     return res.redirect("/admin/settings?success=settings-saved");
   } catch (err) {
     next(err);
@@ -235,29 +198,19 @@ router.post("/account/password", async (req, res, next) => {
     const confirmPassword = String(req.body.confirm_password || "");
     const errors: string[] = [];
 
-    if (!currentPassword) {
-      errors.push("Current password is required.");
-    }
-    if (newPassword.length < 10) {
-      errors.push("New password must be at least 10 characters.");
-    }
-    if (newPassword !== confirmPassword) {
-      errors.push("New password and confirmation must match.");
-    }
+    if (!currentPassword) errors.push("Current password is required.");
+    if (newPassword.length < 10) errors.push("New password must be at least 10 characters.");
+    if (newPassword !== confirmPassword) errors.push("New password and confirmation must match.");
 
     const userId = Number(req.session.userId || 0);
-    const admin = userId ? getAdminById(userId) : undefined;
+    const admin = userId ? await getAdminById(userId) : undefined;
     if (!admin) {
-      req.session.destroy(() => {
-        res.redirect("/admin/login");
-      });
+      req.session.destroy(() => res.redirect("/admin/login"));
       return;
     }
 
     const isCurrentValid = await bcrypt.compare(currentPassword, admin.password_hash);
-    if (!isCurrentValid) {
-      errors.push("Current password is incorrect.");
-    }
+    if (!isCurrentValid) errors.push("Current password is incorrect.");
 
     if (errors.length > 0) {
       return res.status(400).render("admin/account", {
@@ -268,13 +221,10 @@ router.post("/account/password", async (req, res, next) => {
     }
 
     const newPasswordHash = await bcrypt.hash(newPassword, 12);
-    const db = getDb();
-    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(newPasswordHash, admin.id);
+    await getPool().query("UPDATE users SET password_hash = $1 WHERE id = $2", [newPasswordHash, admin.id]);
 
     req.session.destroy((destroyErr) => {
-      if (destroyErr) {
-        return next(destroyErr);
-      }
+      if (destroyErr) return next(destroyErr);
       return res.redirect("/admin/login?success=password-changed");
     });
   } catch (err) {
@@ -282,9 +232,9 @@ router.post("/account/password", async (req, res, next) => {
   }
 });
 
-router.get("/posts", (req, res, next) => {
+router.get("/posts", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = getPool();
     const q = getString(req.query.q);
     const status = getString(req.query.status);
 
@@ -292,34 +242,30 @@ router.get("/posts", (req, res, next) => {
     const params: unknown[] = [];
 
     if (q) {
-      where.push("(p.title LIKE ? OR p.slug LIKE ? OR p.excerpt LIKE ?)");
-      const term = `%${q}%`;
-      params.push(term, term, term);
+      params.push(`%${q}%`);
+      where.push(`(p.title ILIKE $${params.length} OR p.slug ILIKE $${params.length} OR p.excerpt ILIKE $${params.length})`);
     }
 
     if (status === "draft" || status === "published") {
-      where.push("p.status = ?");
       params.push(status);
+      where.push(`p.status = $${params.length}`);
     }
 
     const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
 
-    const posts = db
-      .prepare(
-        `
-      SELECT p.id, p.title, p.slug, p.status, p.published_at, p.updated_at, c.name AS category_name
-      FROM posts p
-      LEFT JOIN categories c ON c.id = p.category_id
-      ${whereSql}
-      ORDER BY p.updated_at DESC, p.id DESC
-    `,
-      )
-      .all(...params) as any[];
+    const result = await db.query(
+      `SELECT p.id, p.title, p.slug, p.status, p.published_at, p.updated_at, c.name AS category_name
+       FROM posts p
+       LEFT JOIN categories c ON c.id = p.category_id
+       ${whereSql}
+       ORDER BY p.updated_at DESC, p.id DESC`,
+      params,
+    );
 
     res.render("admin/posts", {
       pageTitle: "Manage Posts | OTR Life",
       metaDescription: "Admin posts",
-      posts,
+      posts: result.rows,
       filters: { q, status },
     });
   } catch (err) {
@@ -327,14 +273,15 @@ router.get("/posts", (req, res, next) => {
   }
 });
 
-router.get("/posts/new", (_req, res, next) => {
+router.get("/posts/new", async (_req, res, next) => {
   try {
+    const [categories, tags] = await Promise.all([listCategories(), listTags()]);
     res.render("admin/post-form", {
       pageTitle: "New Post | OTR Life",
       metaDescription: "Create post",
       post: null,
-      categories: listCategories(),
-      tags: listTags(),
+      categories,
+      tags,
       selectedTagIds: [] as number[],
       errors: [] as string[],
     });
@@ -346,21 +293,20 @@ router.get("/posts/new", (_req, res, next) => {
 router.post("/posts/new", async (req, res, next) => {
   try {
     const { input, tagIds } = await parsePostInput(req.body as Record<string, unknown>);
-
     if (!input.title || !input.excerpt || !input.content_md) {
       throw new Error("Title, excerpt, and content are required.");
     }
-
-    createPost(input, tagIds);
+    await createPost(input, tagIds);
     return res.redirect("/admin/posts");
   } catch (err) {
     try {
+      const [categories, tags] = await Promise.all([listCategories(), listTags()]);
       return res.status(400).render("admin/post-form", {
         pageTitle: "New Post | OTR Life",
         metaDescription: "Create post",
         post: req.body,
-        categories: listCategories(),
-        tags: listTags(),
+        categories,
+        tags,
         selectedTagIds: parseTagIds(req.body.tag_ids),
         errors: [err instanceof Error ? err.message : "Failed to create post."],
       });
@@ -370,11 +316,10 @@ router.post("/posts/new", async (req, res, next) => {
   }
 });
 
-router.get("/posts/:id/edit", (req, res, next) => {
+router.get("/posts/:id/edit", async (req, res, next) => {
   try {
     const id = Number.parseInt(req.params.id, 10);
-    const post = getPostById(id);
-
+    const [post, categories, tags] = await Promise.all([getPostById(id), listCategories(), listTags()]);
     if (!post) {
       return res.status(404).render("public/404", {
         layout: "layouts/admin",
@@ -382,13 +327,12 @@ router.get("/posts/:id/edit", (req, res, next) => {
         metaDescription: "Not found",
       });
     }
-
     return res.render("admin/post-form", {
       pageTitle: "Edit Post | OTR Life",
       metaDescription: "Edit post",
       post,
-      categories: listCategories(),
-      tags: listTags(),
+      categories,
+      tags,
       selectedTagIds: (post as { tag_ids: number[] }).tag_ids,
       errors: [] as string[],
     });
@@ -400,7 +344,7 @@ router.get("/posts/:id/edit", (req, res, next) => {
 router.post("/posts/:id/edit", async (req, res, next) => {
   const id = Number.parseInt(req.params.id, 10);
   try {
-    const existing = getPostById(id);
+    const existing = await getPostById(id);
     if (!existing) {
       return res.status(404).render("public/404", {
         layout: "layouts/admin",
@@ -408,22 +352,21 @@ router.post("/posts/:id/edit", async (req, res, next) => {
         metaDescription: "Not found",
       });
     }
-
     const { input, tagIds } = await parsePostInput(req.body as Record<string, unknown>, id);
     if (!input.title || !input.excerpt || !input.content_md) {
       throw new Error("Title, excerpt, and content are required.");
     }
-
-    updatePost(id, input, tagIds);
+    await updatePost(id, input, tagIds);
     return res.redirect("/admin/posts");
   } catch (err) {
     try {
+      const [categories, tags] = await Promise.all([listCategories(), listTags()]);
       return res.status(400).render("admin/post-form", {
         pageTitle: "Edit Post | OTR Life",
         metaDescription: "Edit post",
         post: { ...(req.body as Record<string, unknown>), id },
-        categories: listCategories(),
-        tags: listTags(),
+        categories,
+        tags,
         selectedTagIds: parseTagIds(req.body.tag_ids),
         errors: [err instanceof Error ? err.message : "Failed to update post."],
       });
@@ -433,55 +376,52 @@ router.post("/posts/:id/edit", async (req, res, next) => {
   }
 });
 
-router.post("/posts/:id/delete", (req, res, next) => {
+router.post("/posts/:id/delete", async (req, res, next) => {
   try {
-    const db = getDb();
     const id = Number.parseInt(req.params.id, 10);
-    db.prepare("DELETE FROM posts WHERE id = ?").run(id);
+    await getPool().query("DELETE FROM posts WHERE id = $1", [id]);
     res.redirect("/admin/posts");
   } catch (err) {
     next(err);
   }
 });
 
-router.post("/api/categories/quick-create", (req, res, next) => {
+router.post("/api/categories/quick-create", async (req, res, next) => {
   try {
     const name = getString(req.body.name);
-    if (!name) {
-      return res.status(400).json({ error: "Category name is required." });
-    }
-    const db = getDb();
-    const slug = ensureUniqueSlug("categories", getString(req.body.slug), name);
-    const result = db.prepare("INSERT INTO categories (name, slug) VALUES (?, ?)").run(name, slug);
-    const id = Number(result.lastInsertRowid);
-    return res.json({ id, name, slug });
+    if (!name) return res.status(400).json({ error: "Category name is required." });
+    const slug = await ensureUniqueSlug("categories", getString(req.body.slug), name);
+    const result = await getPool().query(
+      "INSERT INTO categories (name, slug) VALUES ($1, $2) RETURNING id, name, slug",
+      [name, slug],
+    );
+    return res.json(result.rows[0]);
   } catch (err) {
     next(err);
   }
 });
 
-router.post("/api/tags/quick-create", (req, res, next) => {
+router.post("/api/tags/quick-create", async (req, res, next) => {
   try {
     const name = getString(req.body.name);
-    if (!name) {
-      return res.status(400).json({ error: "Tag name is required." });
-    }
-    const db = getDb();
-    const slug = ensureUniqueSlug("tags", getString(req.body.slug), name);
-    const result = db.prepare("INSERT INTO tags (name, slug) VALUES (?, ?)").run(name, slug);
-    const id = Number(result.lastInsertRowid);
-    return res.json({ id, name, slug });
+    if (!name) return res.status(400).json({ error: "Tag name is required." });
+    const slug = await ensureUniqueSlug("tags", getString(req.body.slug), name);
+    const result = await getPool().query(
+      "INSERT INTO tags (name, slug) VALUES ($1, $2) RETURNING id, name, slug",
+      [name, slug],
+    );
+    return res.json(result.rows[0]);
   } catch (err) {
     next(err);
   }
 });
 
-router.get("/categories", (_req, res, next) => {
+router.get("/categories", async (_req, res, next) => {
   try {
     res.render("admin/categories", {
       pageTitle: "Manage Categories | OTR Life",
       metaDescription: "Admin categories",
-      categories: listCategories(),
+      categories: await listCategories(),
       errors: [] as string[],
     });
   } catch (err) {
@@ -489,14 +429,14 @@ router.get("/categories", (_req, res, next) => {
   }
 });
 
-router.post("/categories/create", (req, res, next) => {
+router.post("/categories/create", async (req, res, next) => {
   const name = getString(req.body.name);
   if (!name) {
     try {
       return res.status(400).render("admin/categories", {
         pageTitle: "Manage Categories | OTR Life",
         metaDescription: "Admin categories",
-        categories: listCategories(),
+        categories: await listCategories(),
         errors: ["Category name is required."],
       });
     } catch (renderErr) {
@@ -504,50 +444,44 @@ router.post("/categories/create", (req, res, next) => {
       return;
     }
   }
-
   try {
-    const db = getDb();
-    const slug = ensureUniqueSlug("categories", getString(req.body.slug), name);
-    db.prepare("INSERT INTO categories (name, slug) VALUES (?, ?)").run(name, slug);
+    const slug = await ensureUniqueSlug("categories", getString(req.body.slug), name);
+    await getPool().query("INSERT INTO categories (name, slug) VALUES ($1, $2)", [name, slug]);
     res.redirect("/admin/categories");
   } catch (err) {
     next(err);
   }
 });
 
-router.post("/categories/:id/update", (req, res, next) => {
+router.post("/categories/:id/update", async (req, res, next) => {
   try {
-    const db = getDb();
     const id = Number.parseInt(req.params.id, 10);
     const name = getString(req.body.name);
-    if (!name) {
-      return res.redirect("/admin/categories");
-    }
-    const slug = ensureUniqueSlug("categories", getString(req.body.slug) || slugify(name), name, id);
-    db.prepare("UPDATE categories SET name = ?, slug = ? WHERE id = ?").run(name, slug, id);
+    if (!name) return res.redirect("/admin/categories");
+    const slug = await ensureUniqueSlug("categories", getString(req.body.slug) || slugify(name), name, id);
+    await getPool().query("UPDATE categories SET name = $1, slug = $2 WHERE id = $3", [name, slug, id]);
     res.redirect("/admin/categories");
   } catch (err) {
     next(err);
   }
 });
 
-router.post("/categories/:id/delete", (req, res, next) => {
+router.post("/categories/:id/delete", async (req, res, next) => {
   try {
-    const db = getDb();
     const id = Number.parseInt(req.params.id, 10);
-    db.prepare("DELETE FROM categories WHERE id = ?").run(id);
+    await getPool().query("DELETE FROM categories WHERE id = $1", [id]);
     res.redirect("/admin/categories");
   } catch (err) {
     next(err);
   }
 });
 
-router.get("/tags", (_req, res, next) => {
+router.get("/tags", async (_req, res, next) => {
   try {
     res.render("admin/tags", {
       pageTitle: "Manage Tags | OTR Life",
       metaDescription: "Admin tags",
-      tags: listTags(),
+      tags: await listTags(),
       errors: [] as string[],
     });
   } catch (err) {
@@ -555,14 +489,14 @@ router.get("/tags", (_req, res, next) => {
   }
 });
 
-router.post("/tags/create", (req, res, next) => {
+router.post("/tags/create", async (req, res, next) => {
   const name = getString(req.body.name);
   if (!name) {
     try {
       return res.status(400).render("admin/tags", {
         pageTitle: "Manage Tags | OTR Life",
         metaDescription: "Admin tags",
-        tags: listTags(),
+        tags: await listTags(),
         errors: ["Tag name is required."],
       });
     } catch (renderErr) {
@@ -570,96 +504,87 @@ router.post("/tags/create", (req, res, next) => {
       return;
     }
   }
-
   try {
-    const db = getDb();
-    const slug = ensureUniqueSlug("tags", getString(req.body.slug), name);
-    db.prepare("INSERT INTO tags (name, slug) VALUES (?, ?)").run(name, slug);
+    const slug = await ensureUniqueSlug("tags", getString(req.body.slug), name);
+    await getPool().query("INSERT INTO tags (name, slug) VALUES ($1, $2)", [name, slug]);
     res.redirect("/admin/tags");
   } catch (err) {
     next(err);
   }
 });
 
-router.post("/tags/:id/update", (req, res, next) => {
+router.post("/tags/:id/update", async (req, res, next) => {
   try {
-    const db = getDb();
     const id = Number.parseInt(req.params.id, 10);
     const name = getString(req.body.name);
-    if (!name) {
-      return res.redirect("/admin/tags");
-    }
-    const slug = ensureUniqueSlug("tags", getString(req.body.slug) || slugify(name), name, id);
-    db.prepare("UPDATE tags SET name = ?, slug = ? WHERE id = ?").run(name, slug, id);
+    if (!name) return res.redirect("/admin/tags");
+    const slug = await ensureUniqueSlug("tags", getString(req.body.slug) || slugify(name), name, id);
+    await getPool().query("UPDATE tags SET name = $1, slug = $2 WHERE id = $3", [name, slug, id]);
     res.redirect("/admin/tags");
   } catch (err) {
     next(err);
   }
 });
 
-router.post("/tags/:id/delete", (req, res, next) => {
+router.post("/tags/:id/delete", async (req, res, next) => {
   try {
-    const db = getDb();
     const id = Number.parseInt(req.params.id, 10);
-    db.prepare("DELETE FROM tags WHERE id = ?").run(id);
+    await getPool().query("DELETE FROM tags WHERE id = $1", [id]);
     res.redirect("/admin/tags");
   } catch (err) {
     next(err);
   }
 });
 
-router.get("/messages", (_req, res, next) => {
+router.get("/messages", async (_req, res, next) => {
   try {
-    const db = getDb();
-    const messages = db
-      .prepare("SELECT id, name, email, subject, created_at, is_read FROM messages ORDER BY created_at DESC")
-      .all() as any[];
-
+    const result = await getPool().query(
+      "SELECT id, name, email, subject, created_at, is_read FROM messages ORDER BY created_at DESC",
+    );
     res.render("admin/messages", {
       pageTitle: "Messages | OTR Life",
       metaDescription: "Admin messages",
-      messages,
+      messages: result.rows,
     });
   } catch (err) {
     next(err);
   }
 });
 
-router.get("/messages/:id", (req, res, next) => {
+router.get("/messages/:id", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = getPool();
     const id = Number.parseInt(req.params.id, 10);
-    db.prepare("UPDATE messages SET is_read = 1 WHERE id = ?").run(id);
-
-    const message = db
-      .prepare("SELECT id, name, email, subject, body, created_at, is_read FROM messages WHERE id = ?")
-      .get(id);
-
-    if (!message) {
+    await db.query("UPDATE messages SET is_read = 1 WHERE id = $1", [id]);
+    const result = await db.query(
+      "SELECT id, name, email, subject, body, created_at, is_read FROM messages WHERE id = $1",
+      [id],
+    );
+    if (!result.rows[0]) {
       return res.status(404).render("public/404", {
         layout: "layouts/admin",
         pageTitle: "Message Not Found",
         metaDescription: "Not found",
       });
     }
-
     return res.render("admin/message-view", {
       pageTitle: "View Message | OTR Life",
       metaDescription: "Message details",
-      message,
+      message: result.rows[0],
     });
   } catch (err) {
     next(err);
   }
 });
 
-router.post("/messages/:id/toggle-read", (req, res, next) => {
+router.post("/messages/:id/toggle-read", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = getPool();
     const id = Number.parseInt(req.params.id, 10);
-    const current = db.prepare("SELECT is_read FROM messages WHERE id = ?").get(id) as { is_read: number } | undefined;
-    if (current) {
-      db.prepare("UPDATE messages SET is_read = ? WHERE id = ?").run(current.is_read ? 0 : 1, id);
+    const current = await db.query("SELECT is_read FROM messages WHERE id = $1", [id]);
+    if (current.rows[0]) {
+      const newVal = current.rows[0].is_read ? 0 : 1;
+      await db.query("UPDATE messages SET is_read = $1 WHERE id = $2", [newVal, id]);
     }
     res.redirect("/admin/messages");
   } catch (err) {
@@ -667,11 +592,10 @@ router.post("/messages/:id/toggle-read", (req, res, next) => {
   }
 });
 
-router.post("/messages/:id/delete", (req, res, next) => {
+router.post("/messages/:id/delete", async (req, res, next) => {
   try {
-    const db = getDb();
     const id = Number.parseInt(req.params.id, 10);
-    db.prepare("DELETE FROM messages WHERE id = ?").run(id);
+    await getPool().query("DELETE FROM messages WHERE id = $1", [id]);
     res.redirect("/admin/messages");
   } catch (err) {
     next(err);

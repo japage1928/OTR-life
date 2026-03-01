@@ -1,28 +1,6 @@
-import fs from "node:fs";
-import path from "node:path";
-import Database from "better-sqlite3";
+import { Pool } from "pg";
 
 export type PostStatus = "draft" | "published";
-
-export interface SiteSettings {
-  id: 1;
-  site_title: string;
-  tagline: string;
-  about_title: string;
-  about_body_md: string;
-  about_image_url: string;
-  updated_at: string | null;
-}
-
-const DEFAULT_SITE_SETTINGS: Omit<SiteSettings, "updated_at"> = {
-  id: 1,
-  site_title: "OTR Life",
-  tagline: "A trucker-first publication for practical life on the road.",
-  about_title: "About OTR Life",
-  about_body_md:
-    "OTR Life is built for long-haul and regional drivers who need practical, field-tested guidance that works from the cab.",
-  about_image_url: "",
-};
 
 export interface PostInput {
   title: string;
@@ -37,118 +15,34 @@ export interface PostInput {
   category_id: number | null;
 }
 
-const dataDir = path.join(process.cwd(), "data");
-const dbPath = path.join(dataDir, "trucking-blog-tools.db");
+export interface SiteSettings {
+  id: number;
+  site_title: string;
+  tagline: string;
+  about_title: string;
+  about_body_md: string;
+  about_image_url: string;
+  updated_at: string | null;
+}
 
-let dbInstance: Database.Database | null = null;
+const DEFAULT_SITE_SETTINGS: Omit<SiteSettings, "id" | "updated_at"> = {
+  site_title: "OTR Life",
+  tagline: "A trucker-first publication for practical life on the road.",
+  about_title: "About OTR Life",
+  about_body_md: "OTR Life is a blog for over-the-road truck drivers.",
+  about_image_url: "",
+};
 
-export function getDb(): Database.Database {
-  if (dbInstance) {
-    return dbInstance;
+let pool: Pool | null = null;
+
+export function getPool(): Pool {
+  if (!pool) {
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.DATABASE_URL?.includes("localhost") ? false : { rejectUnauthorized: false },
+    });
   }
-
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-  }
-
-  dbInstance = new Database(dbPath);
-  dbInstance.pragma("journal_mode = WAL");
-  dbInstance.pragma("foreign_keys = ON");
-
-  const initDb = dbInstance.transaction(() => {
-    dbInstance!.exec(`
-CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  username TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS categories (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  slug TEXT NOT NULL UNIQUE
-);
-
-CREATE TABLE IF NOT EXISTS tags (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  slug TEXT NOT NULL UNIQUE
-);
-
-CREATE TABLE IF NOT EXISTS posts (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  title TEXT NOT NULL,
-  slug TEXT NOT NULL UNIQUE,
-  excerpt TEXT NOT NULL,
-  content_md TEXT NOT NULL,
-  cover_image TEXT,
-  status TEXT NOT NULL CHECK(status IN ('draft', 'published')) DEFAULT 'draft',
-  published_at TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  meta_title TEXT,
-  meta_description TEXT,
-  category_id INTEGER,
-  FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
-);
-
-CREATE TABLE IF NOT EXISTS post_tags (
-  post_id INTEGER NOT NULL,
-  tag_id INTEGER NOT NULL,
-  PRIMARY KEY (post_id, tag_id),
-  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
-  FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS messages (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  email TEXT NOT NULL,
-  subject TEXT NOT NULL,
-  body TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  is_read INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS site_settings (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
-  site_title TEXT,
-  tagline TEXT,
-  about_title TEXT,
-  about_body_md TEXT,
-  about_image_url TEXT,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_posts_status_published_at ON posts(status, published_at DESC);
-CREATE INDEX IF NOT EXISTS idx_posts_slug ON posts(slug);
-CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug);
-CREATE INDEX IF NOT EXISTS idx_tags_slug ON tags(slug);
-CREATE INDEX IF NOT EXISTS idx_messages_is_read ON messages(is_read);
-`);
-
-    dbInstance!
-      .prepare(
-        `
-      INSERT OR IGNORE INTO site_settings
-        (id, site_title, tagline, about_title, about_body_md, about_image_url, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `,
-      )
-      .run(
-        DEFAULT_SITE_SETTINGS.id,
-        DEFAULT_SITE_SETTINGS.site_title,
-        DEFAULT_SITE_SETTINGS.tagline,
-        DEFAULT_SITE_SETTINGS.about_title,
-        DEFAULT_SITE_SETTINGS.about_body_md,
-        DEFAULT_SITE_SETTINGS.about_image_url,
-      );
-  });
-
-  initDb();
-
-  return dbInstance;
+  return pool;
 }
 
 export function slugify(input: string): string {
@@ -162,220 +56,170 @@ export function slugify(input: string): string {
     .slice(0, 120);
 }
 
-export function ensureUniqueSlug(
+export async function ensureUniqueSlug(
   table: "posts" | "categories" | "tags",
   requestedSlug: string,
   fallbackSource: string,
   excludeId?: number,
-): string {
-  const db = getDb();
+): Promise<string> {
+  const db = getPool();
   const base = slugify(requestedSlug || fallbackSource) || `item-${Date.now()}`;
 
-  const countSlug = (slug: string): number => {
+  const countSlug = async (slug: string): Promise<number> => {
+    let result;
     if (excludeId) {
-      const row = db
-        .prepare(`SELECT COUNT(*) as c FROM ${table} WHERE slug = ? AND id != ?`)
-        .get(slug, excludeId) as { c: number };
-      return row?.c ?? 0;
+      result = await db.query(`SELECT COUNT(*) AS c FROM ${table} WHERE slug = $1 AND id != $2`, [slug, excludeId]);
+    } else {
+      result = await db.query(`SELECT COUNT(*) AS c FROM ${table} WHERE slug = $1`, [slug]);
     }
-    const row = db.prepare(`SELECT COUNT(*) as c FROM ${table} WHERE slug = ?`).get(slug) as { c: number };
-    return row?.c ?? 0;
+    return Number(result.rows[0]?.c ?? 0);
   };
 
-  if (countSlug(base) === 0) {
+  if ((await countSlug(base)) === 0) {
     return base;
   }
 
   let i = 2;
   let candidate = `${base}-${i}`;
-  while (countSlug(candidate) > 0) {
+  while ((await countSlug(candidate)) > 0) {
     i += 1;
     candidate = `${base}-${i}`;
   }
   return candidate;
 }
 
-export function listCategories(): Array<{ id: number; name: string; slug: string }> {
-  const db = getDb();
-  return db.prepare("SELECT id, name, slug FROM categories ORDER BY name ASC").all() as Array<{
-    id: number;
-    name: string;
-    slug: string;
-  }>;
+export async function listCategories(): Promise<Array<{ id: number; name: string; slug: string }>> {
+  const result = await getPool().query("SELECT id, name, slug FROM categories ORDER BY name ASC");
+  return result.rows;
 }
 
-export function listTags(): Array<{ id: number; name: string; slug: string }> {
-  const db = getDb();
-  return db.prepare("SELECT id, name, slug FROM tags ORDER BY name ASC").all() as Array<{
-    id: number;
-    name: string;
-    slug: string;
-  }>;
+export async function listTags(): Promise<Array<{ id: number; name: string; slug: string }>> {
+  const result = await getPool().query("SELECT id, name, slug FROM tags ORDER BY name ASC");
+  return result.rows;
 }
 
-export function getPostTagIds(postId: number): number[] {
-  const db = getDb();
-  const rows = db.prepare("SELECT tag_id FROM post_tags WHERE post_id = ? ORDER BY tag_id ASC").all(postId) as Array<{
-    tag_id: number;
-  }>;
-  return rows.map((row) => row.tag_id);
+export async function getPostTagIds(postId: number): Promise<number[]> {
+  const result = await getPool().query("SELECT tag_id FROM post_tags WHERE post_id = $1 ORDER BY tag_id ASC", [postId]);
+  return result.rows.map((row: { tag_id: number }) => row.tag_id);
 }
 
-export function getPostById(id: number): any {
-  const db = getDb();
-  const post = db
-    .prepare(
-      `
-    SELECT p.*, c.name AS category_name, c.slug AS category_slug
-    FROM posts p
-    LEFT JOIN categories c ON c.id = p.category_id
-    WHERE p.id = ?
-  `,
-    )
-    .get(id);
+export async function getPostById(id: number): Promise<any> {
+  const db = getPool();
+  const result = await db.query(
+    `SELECT p.*, c.name AS category_name, c.slug AS category_slug
+     FROM posts p
+     LEFT JOIN categories c ON c.id = p.category_id
+     WHERE p.id = $1`,
+    [id],
+  );
+  const post = result.rows[0];
+  if (!post) return null;
+  return { ...post, tag_ids: await getPostTagIds(id) };
+}
 
-  if (!post) {
-    return null;
+export async function getPublishedPostBySlug(slug: string): Promise<any> {
+  const result = await getPool().query(
+    `SELECT p.*, c.name AS category_name, c.slug AS category_slug
+     FROM posts p
+     LEFT JOIN categories c ON c.id = p.category_id
+     WHERE p.slug = $1 AND p.status = 'published'
+     LIMIT 1`,
+    [slug],
+  );
+  return result.rows[0] || null;
+}
+
+export async function getPostTags(postId: number): Promise<Array<{ id: number; name: string; slug: string }>> {
+  const result = await getPool().query(
+    `SELECT t.id, t.name, t.slug
+     FROM tags t
+     INNER JOIN post_tags pt ON pt.tag_id = t.id
+     WHERE pt.post_id = $1
+     ORDER BY t.name ASC`,
+    [postId],
+  );
+  return result.rows;
+}
+
+export async function createPost(input: PostInput, tagIds: number[]): Promise<number> {
+  const db = getPool();
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const res = await client.query(
+      `INSERT INTO posts (title, slug, excerpt, content_md, cover_image, status, published_at,
+        created_at, updated_at, meta_title, meta_description, category_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),NOW(),$8,$9,$10)
+       RETURNING id`,
+      [
+        input.title, input.slug, input.excerpt, input.content_md, input.cover_image,
+        input.status, input.published_at, input.meta_title, input.meta_description, input.category_id,
+      ],
+    );
+    const postId = Number(res.rows[0].id);
+    for (const tagId of tagIds) {
+      await client.query("INSERT INTO post_tags (post_id, tag_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [postId, tagId]);
+    }
+    await client.query("COMMIT");
+    return postId;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
   }
+}
 
+export async function updatePost(id: number, input: PostInput, tagIds: number[]): Promise<void> {
+  const db = getPool();
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `UPDATE posts
+       SET title=$1, slug=$2, excerpt=$3, content_md=$4, cover_image=$5, status=$6,
+           published_at=$7, updated_at=NOW(), meta_title=$8, meta_description=$9, category_id=$10
+       WHERE id=$11`,
+      [
+        input.title, input.slug, input.excerpt, input.content_md, input.cover_image,
+        input.status, input.published_at, input.meta_title, input.meta_description, input.category_id, id,
+      ],
+    );
+    await client.query("DELETE FROM post_tags WHERE post_id = $1", [id]);
+    for (const tagId of tagIds) {
+      await client.query("INSERT INTO post_tags (post_id, tag_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [id, tagId]);
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function adminStats(): Promise<{ totalPosts: number; drafts: number; unreadMessages: number }> {
+  const db = getPool();
+  const [total, drafts, unread] = await Promise.all([
+    db.query("SELECT COUNT(*) AS c FROM posts"),
+    db.query("SELECT COUNT(*) AS c FROM posts WHERE status = 'draft'"),
+    db.query("SELECT COUNT(*) AS c FROM messages WHERE is_read = 0"),
+  ]);
   return {
-    ...post,
-    tag_ids: getPostTagIds(id),
+    totalPosts: Number(total.rows[0]?.c ?? 0),
+    drafts: Number(drafts.rows[0]?.c ?? 0),
+    unreadMessages: Number(unread.rows[0]?.c ?? 0),
   };
 }
 
-export function getPublishedPostBySlug(slug: string): any {
-  const db = getDb();
-  return db
-    .prepare(
-      `
-    SELECT p.*, c.name AS category_name, c.slug AS category_slug
-    FROM posts p
-    LEFT JOIN categories c ON c.id = p.category_id
-    WHERE p.slug = ? AND p.status = 'published'
-    LIMIT 1
-  `,
-    )
-    .get(slug);
-}
-
-export function getPostTags(postId: number): Array<{ id: number; name: string; slug: string }> {
-  const db = getDb();
-  return db
-    .prepare(
-      `
-    SELECT t.id, t.name, t.slug
-    FROM tags t
-    INNER JOIN post_tags pt ON pt.tag_id = t.id
-    WHERE pt.post_id = ?
-    ORDER BY t.name ASC
-  `,
-    )
-    .all(postId) as Array<{ id: number; name: string; slug: string }>;
-}
-
-export function createPost(input: PostInput, tagIds: number[]): number {
-  const db = getDb();
-  const insert = db.transaction(() => {
-    const result = db
-      .prepare(
-        `
-      INSERT INTO posts (
-        title, slug, excerpt, content_md, cover_image, status, published_at,
-        created_at, updated_at, meta_title, meta_description, category_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?)
-    `,
-      )
-      .run(
-        input.title,
-        input.slug,
-        input.excerpt,
-        input.content_md,
-        input.cover_image,
-        input.status,
-        input.published_at,
-        input.meta_title,
-        input.meta_description,
-        input.category_id,
-      );
-
-    const postId = Number(result.lastInsertRowid);
-
-    for (const tagId of tagIds) {
-      db.prepare("INSERT OR IGNORE INTO post_tags (post_id, tag_id) VALUES (?, ?)").run(postId, tagId);
-    }
-
-    return postId;
-  });
-
-  return insert();
-}
-
-export function updatePost(id: number, input: PostInput, tagIds: number[]): void {
-  const db = getDb();
-  const update = db.transaction(() => {
-    db.prepare(
-      `
-      UPDATE posts
-      SET title = ?, slug = ?, excerpt = ?, content_md = ?, cover_image = ?, status = ?,
-          published_at = ?, updated_at = CURRENT_TIMESTAMP,
-          meta_title = ?, meta_description = ?, category_id = ?
-      WHERE id = ?
-    `,
-    ).run(
-      input.title,
-      input.slug,
-      input.excerpt,
-      input.content_md,
-      input.cover_image,
-      input.status,
-      input.published_at,
-      input.meta_title,
-      input.meta_description,
-      input.category_id,
-      id,
-    );
-
-    db.prepare("DELETE FROM post_tags WHERE post_id = ?").run(id);
-    for (const tagId of tagIds) {
-      db.prepare("INSERT OR IGNORE INTO post_tags (post_id, tag_id) VALUES (?, ?)").run(id, tagId);
-    }
-  });
-
-  update();
-}
-
-export function adminStats(): { totalPosts: number; drafts: number; unreadMessages: number } {
-  const db = getDb();
-  const totalPosts = ((db.prepare("SELECT COUNT(*) AS c FROM posts").get() as { c: number })?.c ?? 0) as number;
-  const drafts = ((db.prepare("SELECT COUNT(*) AS c FROM posts WHERE status = 'draft'").get() as { c: number })?.c ??
-    0) as number;
-  const unreadMessages = ((db.prepare("SELECT COUNT(*) AS c FROM messages WHERE is_read = 0").get() as {
-    c: number;
-  })?.c ?? 0) as number;
-  return { totalPosts, drafts, unreadMessages };
-}
-
-export function getSiteSettings(): SiteSettings {
-  const db = getDb();
-  const row = db
-    .prepare(
-      `
-    SELECT id, site_title, tagline, about_title, about_body_md, about_image_url, updated_at
-    FROM site_settings
-    WHERE id = 1
-    LIMIT 1
-  `,
-    )
-    .get() as Partial<SiteSettings> | undefined;
-
+export async function getSiteSettings(): Promise<SiteSettings> {
+  const result = await getPool().query(
+    "SELECT id, site_title, tagline, about_title, about_body_md, about_image_url, updated_at FROM site_settings WHERE id = 1 LIMIT 1",
+  );
+  const row = result.rows[0];
   if (!row) {
-    return {
-      ...DEFAULT_SITE_SETTINGS,
-      updated_at: null,
-    };
+    return { id: 1, ...DEFAULT_SITE_SETTINGS, updated_at: null };
   }
-
   return {
     id: 1,
     site_title: String(row.site_title || DEFAULT_SITE_SETTINGS.site_title),
@@ -387,31 +231,24 @@ export function getSiteSettings(): SiteSettings {
   };
 }
 
-export function updateSiteSettings(input: {
+export async function updateSiteSettings(input: {
   site_title: string;
   tagline: string;
   about_title: string;
   about_body_md: string;
   about_image_url: string;
-}): void {
-  const db = getDb();
-  const result = db
-    .prepare(
-      `
-    UPDATE site_settings
-    SET site_title = ?, tagline = ?, about_title = ?, about_body_md = ?, about_image_url = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = 1
-  `,
-    )
-    .run(input.site_title, input.tagline, input.about_title, input.about_body_md, input.about_image_url);
-
-  if (result.changes === 0) {
-    db.prepare(
-      `
-      INSERT INTO site_settings
-        (id, site_title, tagline, about_title, about_body_md, about_image_url, updated_at)
-      VALUES (1, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `,
-    ).run(input.site_title, input.tagline, input.about_title, input.about_body_md, input.about_image_url);
+}): Promise<void> {
+  const result = await getPool().query(
+    `UPDATE site_settings
+     SET site_title=$1, tagline=$2, about_title=$3, about_body_md=$4, about_image_url=$5, updated_at=NOW()
+     WHERE id=1`,
+    [input.site_title, input.tagline, input.about_title, input.about_body_md, input.about_image_url],
+  );
+  if (result.rowCount === 0) {
+    await getPool().query(
+      `INSERT INTO site_settings (id, site_title, tagline, about_title, about_body_md, about_image_url, updated_at)
+       VALUES (1,$1,$2,$3,$4,$5,NOW())`,
+      [input.site_title, input.tagline, input.about_title, input.about_body_md, input.about_image_url],
+    );
   }
 }

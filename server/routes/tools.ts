@@ -3,11 +3,15 @@ import { getSiteSettings } from "../db";
 
 const router = Router();
 
-router.use((_req, res, next) => {
-  const settings = getSiteSettings();
-  res.locals.siteTitle = settings.site_title || "OTR Life";
-  res.locals.siteTagline = settings.tagline || "A trucker-first publication for practical life on the road.";
-  next();
+router.use(async (_req, res, next) => {
+  try {
+    const settings = await getSiteSettings();
+    res.locals.siteTitle = settings.site_title || "OTR Life";
+    res.locals.siteTagline = settings.tagline || "A trucker-first publication for practical life on the road.";
+    next();
+  } catch (err) {
+    next(err);
+  }
 });
 
 function getSiteUrl(req: { protocol: string; get(name: string): string | undefined }) {

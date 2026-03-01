@@ -88,7 +88,7 @@ app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
 });
 
 async function start() {
-  runSeed();
+  await runSeed();
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Trucking Blog Tools listening on http://localhost:${PORT}`);
   });
