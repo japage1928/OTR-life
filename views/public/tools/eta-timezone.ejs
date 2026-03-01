@@ -1,0 +1,63 @@
+<section class="panel">
+  <h1>ETA + Time Zone Helper</h1>
+  <p class="muted">
+    Calculate a realistic arrival timestamp using departure date/time, driving hours, break minutes, and arrival timezone
+    shift. Useful for long lanes that cross zones overnight.
+  </p>
+
+  <% if (errors.length) { %>
+    <div class="alert error">
+      <ul>
+      <% errors.forEach((error) => { %>
+        <li><%= error %></li>
+      <% }) %>
+      </ul>
+    </div>
+  <% } %>
+
+  <form class="stack" method="post" action="/tools/eta-timezone">
+    <label>Departure Date/Time (local)
+      <input type="datetime-local" name="departure_datetime" value="<%= formData.departure_datetime %>" required />
+    </label>
+
+    <label>Driving Hours
+      <input type="number" step="0.25" min="0.01" name="driving_hours" value="<%= formData.driving_hours %>" required />
+    </label>
+
+    <label>Stop Minutes
+      <input type="number" step="1" min="0" name="stop_minutes" value="<%= formData.stop_minutes %>" />
+    </label>
+
+    <label>Time Zone Shift at Arrival
+      <select name="timezone_shift">
+        <% [-3, -2, -1, 0, 1, 2, 3].forEach((shift) => { %>
+          <option value="<%= shift %>" <%= Number(formData.timezone_shift) === shift ? 'selected' : '' %>>
+            <%= shift > 0 ? '+' + shift : String(shift) %> hour
+          </option>
+        <% }) %>
+      </select>
+    </label>
+
+    <div class="row">
+      <button class="btn" type="submit">Calculate ETA</button>
+      <a class="btn btn-outline" href="/tools/eta-timezone">Reset</a>
+    </div>
+  </form>
+</section>
+
+<% if (result) { %>
+  <section class="card tool-result-card">
+    <h2>Results</h2>
+    <p><strong>Total Duration:</strong> <%= result.totalDuration %> hours</p>
+    <p><strong>Arrival Date/Time:</strong> <%= result.arrival %></p>
+    <p class="muted">Time zone shift is applied at arrival.</p>
+  </section>
+<% } %>
+
+<section class="card">
+  <h2>FAQ</h2>
+  <p><strong>Does this include breaks?</strong><br />Yes, stop minutes are converted to hours and added to driving time.</p>
+  <p><strong>What if I cross multiple time zones?</strong><br />Use the net arrival shift from your departure zone to your final destination zone.</p>
+  <p><strong>Can I use decimals for driving time?</strong><br />Yes, examples: <code>7.5</code> for 7h 30m, <code>10.25</code> for 10h 15m.</p>
+  <p><strong>Is this legal HOS planning?</strong><br />No, it is a planning helper only. Follow your ELD and company policy for compliance.</p>
+</section>

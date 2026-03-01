@@ -1,9 +1,6 @@
 <section class="hero home-hero">
   <h1>Drive smarter. Rest better. Stay road-ready.</h1>
-  <p>
-    Long-haul life needs practical guidance. OTR Life brings no-nonsense advice on truck setup, money, food, and routines
-    that actually hold up mile after mile.
-  </p>
+  <p><%= settings.tagline || "Long-haul life needs practical guidance that holds up mile after mile." %></p>
   <a class="btn" href="/posts">Start Here</a>
 </section>
 
@@ -34,12 +31,13 @@
 </section>
 
 <section class="card author-card">
-  <div class="author-avatar" aria-hidden="true">OTR</div>
-  <h3>Hi, I&apos;m the OTR Life crew.</h3>
-  <p class="muted">
-    We publish field-tested guidance for drivers living out of the cab. Everything here is built for real schedules, real
-    budgets, and real truck-stop conditions.
-  </p>
+  <% if (settings.about_image_url) { %>
+    <img src="<%= settings.about_image_url %>" alt="<%= settings.about_title %>" class="author-photo" />
+  <% } else { %>
+    <div class="author-avatar" aria-hidden="true">OTR</div>
+  <% } %>
+  <h3><%= settings.about_title || "About OTR Life" %></h3>
+  <p class="muted"><%= aboutPreview || "Field-tested guidance for real schedules, budgets, and truck-stop conditions." %></p>
   <a href="/about" class="read-more-link">Read my story</a>
 </section>
 

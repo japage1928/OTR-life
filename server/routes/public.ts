@@ -2,7 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from "express"
 import rateLimit from "express-rate-limit";
 import { body, validationResult } from "express-validator";
 import { marked } from "marked";
-import { getDb, getPostTags, getPublishedPostBySlug } from "../db";
+import { getDb, getPostTags, getPublishedPostBySlug, getSiteSettings } from "../db";
 
 const router = Router();
 
@@ -19,7 +19,16 @@ function mdToSafeHtml(md: string): string {
   const raw = marked.parse(md || "");
   return String(raw)
     .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
-    .replace(/on\w+\s*=\s*"[^"]*"/gi, "");
+    .replace(/\son\w+\s*=\s*(['"])[\s\S]*?\1/gi, "")
+    .replace(/\s(href|src)\s*=\s*(['"])\s*javascript:[^'"]*\2/gi, ` $1="#"`);
+}
+
+function plainTextPreview(input: string, max = 220): string {
+  const text = input.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  if (text.length <= max) {
+    return text;
+  }
+  return `${text.slice(0, max).trimEnd()}...`;
 }
 
 function pageMeta(base: {
@@ -38,9 +47,17 @@ function pageMeta(base: {
   };
 }
 
+router.use((_req, res, next) => {
+  const settings = getSiteSettings();
+  res.locals.siteTitle = settings.site_title || "OTR Life";
+  res.locals.siteTagline = settings.tagline || "A trucker-first publication for practical life on the road.";
+  next();
+});
+
 router.get("/", (req, res, next) => {
   try {
     const db = getDb();
+    const settings = getSiteSettings();
 
     const latestPosts = db
       .prepare(
@@ -68,14 +85,18 @@ router.get("/", (req, res, next) => {
       )
       .all() as any[];
 
+    const aboutBodyHtml = mdToSafeHtml(settings.about_body_md || "");
+
     res.render("public/home", {
       ...pageMeta({
-        title: "OTR Life | Practical Guides for Truck Drivers",
-        description: "Bunk-friendly reading for drivers: gear reviews, money tips, health advice, and apps that matter on the road.",
+        title: `${settings.site_title || "OTR Life"} | Practical Guides for Truck Drivers`,
+        description: settings.tagline || "Bunk-friendly reading for drivers: gear reviews, money tips, health advice, and apps that matter on the road.",
         canonical: `${getSiteUrl(req)}/`,
       }),
       latestPosts,
       featuredCategories,
+      settings,
+      aboutPreview: plainTextPreview(aboutBodyHtml),
     });
   } catch (err) {
     next(err);
@@ -248,12 +269,17 @@ router.get("/tag/:slug", (req, res, next) => {
 });
 
 router.get("/about", (req, res) => {
+  const settings = getSiteSettings();
+  const aboutBodyHtml = mdToSafeHtml(settings.about_body_md || "");
+
   res.render("public/about", {
     ...pageMeta({
-      title: "About | Trucking Blog Tools",
-      description: "Why Trucking Blog Tools exists and who it helps.",
+      title: `About | ${settings.site_title || "OTR Life"}`,
+      description: settings.tagline || "Why this site exists and who it helps.",
       canonical: `${getSiteUrl(req)}/about`,
     }),
+    settings,
+    aboutBodyHtml,
   });
 });
 
@@ -373,6 +399,10 @@ router.get("/sitemap.xml", (req, res, next) => {
     const urls: string[] = [
       `${siteUrl}/`,
       `${siteUrl}/posts`,
+      `${siteUrl}/tools`,
+      `${siteUrl}/tools/fuel-cost`,
+      `${siteUrl}/tools/route-log`,
+      `${siteUrl}/tools/eta-timezone`,
       `${siteUrl}/about`,
       `${siteUrl}/contact`,
       ...postUrls.map((post) => `${siteUrl}/post/${post.slug}`),

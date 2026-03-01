@@ -17,6 +17,8 @@
         <a href="/admin/categories" class="<%= currentPath.startsWith('/categories') ? 'active' : '' %>">Categories</a>
         <a href="/admin/tags" class="<%= currentPath.startsWith('/tags') ? 'active' : '' %>">Tags</a>
         <a href="/admin/messages" class="<%= currentPath.startsWith('/messages') ? 'active' : '' %>">Messages</a>
+        <a href="/admin/settings" class="<%= currentPath.startsWith('/settings') ? 'active' : '' %>">Settings</a>
+        <a href="/admin/account" class="<%= currentPath.startsWith('/account') ? 'active' : '' %>">Account</a>
       </nav>
       <form method="post" action="/admin/logout">
         <button type="submit" class="btn btn-outline w-full">Logout</button>

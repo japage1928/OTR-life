@@ -30,3 +30,10 @@ export function getAdminByUsername(username: string) {
     .prepare("SELECT id, username, password_hash FROM users WHERE username = ? LIMIT 1")
     .get(username) as { id: number; username: string; password_hash: string } | undefined;
 }
+
+export function getAdminById(id: number) {
+  const db = getDb();
+  return db
+    .prepare("SELECT id, username, password_hash FROM users WHERE id = ? LIMIT 1")
+    .get(id) as { id: number; username: string; password_hash: string } | undefined;
+}

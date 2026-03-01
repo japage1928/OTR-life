@@ -1,0 +1,41 @@
+<section class="admin-panel">
+  <h1>Site Settings</h1>
+
+  <% if (success) { %>
+    <div class="alert success"><%= success %></div>
+  <% } %>
+
+  <% if (errors.length) { %>
+    <div class="alert error">
+      <ul>
+      <% errors.forEach((error) => { %>
+        <li><%= error %></li>
+      <% }) %>
+      </ul>
+    </div>
+  <% } %>
+
+  <form class="stack" method="post" action="/admin/settings">
+    <label>Site title
+      <input type="text" name="site_title" value="<%= settings.site_title || '' %>" required />
+    </label>
+
+    <label>Tagline
+      <input type="text" name="tagline" value="<%= settings.tagline || '' %>" />
+    </label>
+
+    <label>About title
+      <input type="text" name="about_title" value="<%= settings.about_title || '' %>" required />
+    </label>
+
+    <label>About body (Markdown)
+      <textarea name="about_body_md" rows="12" required><%= settings.about_body_md || '' %></textarea>
+    </label>
+
+    <label>About image URL
+      <input type="url" name="about_image_url" value="<%= settings.about_image_url || '' %>" placeholder="https://example.com/about.jpg" />
+    </label>
+
+    <button class="btn" type="submit">Save Settings</button>
+  </form>
+</section>

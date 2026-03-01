@@ -1,0 +1,30 @@
+<section class="admin-panel narrow">
+  <h1>Account</h1>
+  <p class="muted">Change your admin password. You will be signed out after saving.</p>
+
+  <% if (errors.length) { %>
+    <div class="alert error">
+      <ul>
+      <% errors.forEach((error) => { %>
+        <li><%= error %></li>
+      <% }) %>
+      </ul>
+    </div>
+  <% } %>
+
+  <form class="stack" method="post" action="/admin/account/password">
+    <label>Current password
+      <input type="password" name="current_password" autocomplete="current-password" required />
+    </label>
+
+    <label>New password
+      <input type="password" name="new_password" autocomplete="new-password" minlength="10" required />
+    </label>
+
+    <label>Confirm new password
+      <input type="password" name="confirm_password" autocomplete="new-password" minlength="10" required />
+    </label>
+
+    <button class="btn" type="submit">Update Password</button>
+  </form>
+</section>

@@ -5,6 +5,7 @@ import session from "express-session";
 import helmet from "helmet";
 import expressLayouts from "express-ejs-layouts";
 import publicRoutes from "./routes/public";
+import toolsRoutes from "./routes/tools";
 import adminRoutes from "./routes/admin";
 import { runSeed } from "./seed";
 
@@ -64,6 +65,7 @@ app.use((req, res, next) => {
 });
 
 app.use("/admin", adminRoutes);
+app.use("/tools", toolsRoutes);
 app.use("/", publicRoutes);
 
 app.use((req, res) => {

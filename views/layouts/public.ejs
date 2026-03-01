@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title><%= pageTitle || "OTR Life" %></title>
-  <meta name="description" content="<%= metaDescription || 'OTR Life: Practical guides for truck drivers' %>" />
+  <title><%= pageTitle || (siteTitle || "OTR Life") %></title>
+  <meta name="description" content="<%= metaDescription || siteTagline || 'OTR Life: Practical guides for truck drivers' %>" />
   <% if (canonicalUrl) { %><link rel="canonical" href="<%= canonicalUrl %>" /><% } %>
   <% if (og && Object.keys(og).length) { %>
     <% if (og.title) { %><meta property="og:title" content="<%= og.title %>" /><% } %>
@@ -24,10 +24,11 @@
 <body class="public-body">
   <header class="site-header">
     <div class="container nav-row">
-      <a class="brand" href="/">OTR Life</a>
+      <a class="brand" href="/"><%= siteTitle || "OTR Life" %></a>
       <nav class="nav-links">
         <a href="/" class="<%= currentPath === '/' ? 'active' : '' %>">Home</a>
         <a href="/posts" class="<%= currentPath.startsWith('/post') || currentPath === '/posts' ? 'active' : '' %>">Posts</a>
+        <a href="/tools" class="<%= currentPath.startsWith('/tools') ? 'active' : '' %>">Tools</a>
         <a href="/about" class="<%= currentPath === '/about' ? 'active' : '' %>">About</a>
         <a href="/contact" class="<%= currentPath === '/contact' ? 'active' : '' %>">Contact</a>
       </nav>
@@ -41,13 +42,14 @@
   <footer class="site-footer">
     <div class="container footer-grid">
       <div>
-        <h3>OTR Life</h3>
-        <p class="muted">A trucker-first publication for practical life on the road.</p>
+        <h3><%= siteTitle || "OTR Life" %></h3>
+        <p class="muted"><%= siteTagline || "A trucker-first publication for practical life on the road." %></p>
       </div>
       <div>
         <h4>Explore</h4>
         <a href="/about">About</a>
         <a href="/contact">Contact</a>
+        <a href="/tools">Tools</a>
         <a href="/posts">Start Here</a>
       </div>
       <div>
@@ -56,7 +58,7 @@
         <a href="/sitemap.xml">Sitemap</a>
       </div>
     </div>
-    <p class="footer-copy">&copy; 2026 OTR Life. All rights reserved.</p>
+    <p class="footer-copy">&copy; 2026 <%= siteTitle || "OTR Life" %>. All rights reserved.</p>
   </footer>
 </body>
 </html>

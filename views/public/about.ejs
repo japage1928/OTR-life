@@ -1,23 +1,16 @@
 <section class="panel">
-  <h1>About OTR Life</h1>
-  <p>OTR Life is built for long-haul and regional drivers who need real answers in the cab. No fluff, no sponsored content—just practical guidance on gear that lasts, money decisions that matter, health tips that work in tight spaces, and apps that don't waste your data.</p>
-  
-  <h2 style="margin-top: 2rem;">Why Dark UI?</h2>
-  <p>You're reading this at 2 AM in a truck stop lot, or before dawn before running. High-contrast dark backgrounds, large readable fonts, and simple navigation mean you can get what you need without straining your eyes or waiting for bloated pages to load over sketchy WiFi.</p>
-  
-  <h2>What You'll Find</h2>
-  <ul style="line-height: 2;">
-    <li><strong>Bunk Comfort:</strong> Mattresses, blankets, pillows, sleep optimization</li>
-    <li><strong>Gear Reviews:</strong> Coolers, dash cams, truck organization tools</li>
-    <li><strong>Apps & Tools:</strong> Practical software for navigation, logging, entertainment</li>
-    <li><strong>Money & Home:</strong> Financial planning for OTR life, managing home while away</li>
-    <li><strong>Health OTR:</strong> Fitness, nutrition, mental health on the road</li>
-  </ul>
-  
-  <h2 style="margin-top: 2rem;">Built for You</h2>
-  <p>Every post is written with the reality of life on the road in mind—short attention spans, internet delays, and the need for quick, actionable information you can actually use before your next run.</p>
-  
-  <div style="margin-top: 3rem; padding: 1.5rem; background: rgba(217, 142, 4, 0.1); border-left: 4px solid var(--accent); border-radius: 0.4rem;">
-    <p style="margin: 0;"><strong>Questions? Feedback?</strong> <a href="/contact">Get in touch</a>—we read every message.</p>
+  <h1><%= settings.about_title || "About OTR Life" %></h1>
+  <p class="muted"><%= settings.tagline || "" %></p>
+
+  <% if (settings.about_image_url) { %>
+    <img src="<%= settings.about_image_url %>" alt="<%= settings.about_title %>" class="about-image" />
+  <% } %>
+
+  <div class="markdown">
+    <%- aboutBodyHtml %>
+  </div>
+
+  <div class="about-contact-box">
+    <p><strong>Questions? Feedback?</strong> <a href="/contact">Get in touch</a>.</p>
   </div>
 </section>

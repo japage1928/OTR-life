@@ -1,0 +1,62 @@
+<section class="panel">
+  <h1>Route Log / Trip Log Converter</h1>
+  <p class="muted">
+    Paste rough notes from your phone or notebook and convert them into a cleaner trip log format. You also get a CSV
+    preview you can copy into spreadsheets or dispatch records.
+  </p>
+
+  <% if (errors.length) { %>
+    <div class="alert error">
+      <ul>
+      <% errors.forEach((error) => { %>
+        <li><%= error %></li>
+      <% }) %>
+      </ul>
+    </div>
+  <% } %>
+
+  <form class="stack" method="post" action="/tools/route-log">
+    <label>Raw Notes
+      <textarea name="raw_text" rows="10" required placeholder="Example:&#10;07:15 - Departed terminal&#10;Fuel stop Amarillo&#10;22:10 - Arrived receiver"><%= formData.raw_text %></textarea>
+    </label>
+    <div class="row gap">
+      <label>Date (optional)
+        <input type="date" name="date" value="<%= formData.date %>" />
+      </label>
+      <label>Truck Number (optional)
+        <input type="text" name="truck_number" value="<%= formData.truck_number %>" />
+      </label>
+      <label>Trailer Number (optional)
+        <input type="text" name="trailer_number" value="<%= formData.trailer_number %>" />
+      </label>
+    </div>
+    <div class="row">
+      <button class="btn" type="submit">Convert Notes</button>
+      <a class="btn btn-outline" href="/tools/route-log">Reset</a>
+    </div>
+  </form>
+</section>
+
+<% if (result) { %>
+  <section class="card tool-result-card">
+    <h2>Clean Log (<%= result.entryCount %> entries)</h2>
+    <textarea id="clean-log-output" class="tool-output" rows="12" readonly><%= result.cleanLog %></textarea>
+    <button type="button" class="btn btn-outline copy-btn" data-copy-target="clean-log-output">Copy Clean Log</button>
+  </section>
+
+  <section class="card tool-result-card">
+    <h2>CSV Preview</h2>
+    <textarea id="csv-output" class="tool-output" rows="10" readonly><%= result.csv %></textarea>
+    <button type="button" class="btn btn-outline copy-btn" data-copy-target="csv-output">Copy CSV</button>
+  </section>
+<% } %>
+
+<section class="card">
+  <h2>FAQ</h2>
+  <p><strong>Do I need timestamps on every line?</strong><br />No. If a line has no timestamp, the CSV timestamp field is left blank.</p>
+  <p><strong>What timestamp format works best?</strong><br />Use formats like <code>07:15 - note</code> or <code>2026-03-01 07:15 - note</code>.</p>
+  <p><strong>Will this save logs in the database?</strong><br />No. This tool only transforms what you paste and shows output on the page.</p>
+  <p><strong>Can dispatch copy this CSV?</strong><br />Yes, copy the CSV preview and paste it into Sheets, Excel, or internal forms.</p>
+</section>
+
+<script src="/js/tools.js" defer></script>

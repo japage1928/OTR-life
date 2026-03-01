@@ -1,22 +1,39 @@
 import { Router } from "express";
+import bcrypt from "bcrypt";
 import {
   adminStats,
   createPost,
   ensureUniqueSlug,
   getDb,
   getPostById,
+  getSiteSettings,
   listCategories,
   listTags,
   type PostInput,
   slugify,
+  updateSiteSettings,
   updatePost,
 } from "../db";
-import { getAdminByUsername, requireAdmin, verifyPassword } from "../auth";
+import { getAdminById, getAdminByUsername, requireAdmin, verifyPassword } from "../auth";
 
 const router = Router();
 
 function getString(value: unknown): string {
   return String(value || "").trim();
+}
+
+function cleanInlineText(value: unknown): string {
+  return getString(value).replace(/[<>]/g, "");
+}
+
+function getSuccessMessage(code: string): string {
+  if (code === "settings-saved") {
+    return "Settings updated successfully.";
+  }
+  if (code === "password-changed") {
+    return "Password changed successfully. Please sign in again.";
+  }
+  return "";
 }
 
 function parseTagIds(input: unknown): number[] {
@@ -62,10 +79,12 @@ router.use((req, res, next) => {
 });
 
 router.get("/login", (_req, res) => {
+  const success = getSuccessMessage(getString(_req.query.success));
   res.render("admin/login", {
     pageTitle: "Admin Login | OTR Life",
     metaDescription: "Admin login",
     errors: [],
+    success,
   });
 });
 
@@ -80,6 +99,7 @@ router.post("/login", async (req, res, next) => {
         pageTitle: "Admin Login | OTR Life",
         metaDescription: "Admin login",
         errors: ["Invalid username or password."],
+        success: "",
       });
     }
 
@@ -89,6 +109,7 @@ router.post("/login", async (req, res, next) => {
         pageTitle: "Admin Login | OTR Life",
         metaDescription: "Admin login",
         errors: ["Invalid username or password."],
+        success: "",
       });
     }
 
@@ -114,6 +135,147 @@ router.get("/", (_req, res, next) => {
       pageTitle: "Dashboard | OTR Life",
       metaDescription: "Admin dashboard",
       stats: adminStats(),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/settings", (_req, res, next) => {
+  try {
+    res.render("admin/settings", {
+      pageTitle: "Site Settings | OTR Life",
+      metaDescription: "Manage site settings",
+      settings: getSiteSettings(),
+      errors: [] as string[],
+      success: getSuccessMessage(getString(_req.query.success)),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/settings", (req, res, next) => {
+  try {
+    const site_title = cleanInlineText(req.body.site_title);
+    const tagline = cleanInlineText(req.body.tagline);
+    const about_title = cleanInlineText(req.body.about_title);
+    const about_body_md = getString(req.body.about_body_md);
+    const about_image_url = getString(req.body.about_image_url);
+
+    const errors: string[] = [];
+    if (!site_title) {
+      errors.push("Site title is required.");
+    }
+    if (!about_title) {
+      errors.push("About title is required.");
+    }
+    if (!about_body_md) {
+      errors.push("About body is required.");
+    }
+    if (about_image_url) {
+      try {
+        const parsed = new URL(about_image_url);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+          errors.push("About image URL must use http or https.");
+        }
+      } catch {
+        errors.push("About image URL must be a valid URL.");
+      }
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).render("admin/settings", {
+        pageTitle: "Site Settings | OTR Life",
+        metaDescription: "Manage site settings",
+        settings: {
+          id: 1,
+          site_title,
+          tagline,
+          about_title,
+          about_body_md,
+          about_image_url,
+          updated_at: null,
+        },
+        errors,
+        success: "",
+      });
+    }
+
+    updateSiteSettings({
+      site_title,
+      tagline,
+      about_title,
+      about_body_md,
+      about_image_url,
+    });
+
+    return res.redirect("/admin/settings?success=settings-saved");
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/account", (_req, res, next) => {
+  try {
+    res.render("admin/account", {
+      pageTitle: "Account | OTR Life",
+      metaDescription: "Manage admin account",
+      errors: [] as string[],
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/account/password", async (req, res, next) => {
+  try {
+    const currentPassword = String(req.body.current_password || "");
+    const newPassword = String(req.body.new_password || "");
+    const confirmPassword = String(req.body.confirm_password || "");
+    const errors: string[] = [];
+
+    if (!currentPassword) {
+      errors.push("Current password is required.");
+    }
+    if (newPassword.length < 10) {
+      errors.push("New password must be at least 10 characters.");
+    }
+    if (newPassword !== confirmPassword) {
+      errors.push("New password and confirmation must match.");
+    }
+
+    const userId = Number(req.session.userId || 0);
+    const admin = userId ? getAdminById(userId) : undefined;
+    if (!admin) {
+      req.session.destroy(() => {
+        res.redirect("/admin/login");
+      });
+      return;
+    }
+
+    const isCurrentValid = await bcrypt.compare(currentPassword, admin.password_hash);
+    if (!isCurrentValid) {
+      errors.push("Current password is incorrect.");
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).render("admin/account", {
+        pageTitle: "Account | OTR Life",
+        metaDescription: "Manage admin account",
+        errors,
+      });
+    }
+
+    const newPasswordHash = await bcrypt.hash(newPassword, 12);
+    const db = getDb();
+    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(newPasswordHash, admin.id);
+
+    req.session.destroy((destroyErr) => {
+      if (destroyErr) {
+        return next(destroyErr);
+      }
+      return res.redirect("/admin/login?success=password-changed");
     });
   } catch (err) {
     next(err);

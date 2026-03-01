@@ -4,6 +4,26 @@ import Database from "better-sqlite3";
 
 export type PostStatus = "draft" | "published";
 
+export interface SiteSettings {
+  id: 1;
+  site_title: string;
+  tagline: string;
+  about_title: string;
+  about_body_md: string;
+  about_image_url: string;
+  updated_at: string | null;
+}
+
+const DEFAULT_SITE_SETTINGS: Omit<SiteSettings, "updated_at"> = {
+  id: 1,
+  site_title: "OTR Life",
+  tagline: "A trucker-first publication for practical life on the road.",
+  about_title: "About OTR Life",
+  about_body_md:
+    "OTR Life is built for long-haul and regional drivers who need practical, field-tested guidance that works from the cab.",
+  about_image_url: "",
+};
+
 export interface PostInput {
   title: string;
   slug: string;
@@ -91,12 +111,39 @@ CREATE TABLE IF NOT EXISTS messages (
   is_read INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS site_settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  site_title TEXT,
+  tagline TEXT,
+  about_title TEXT,
+  about_body_md TEXT,
+  about_image_url TEXT,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_posts_status_published_at ON posts(status, published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_posts_slug ON posts(slug);
 CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug);
 CREATE INDEX IF NOT EXISTS idx_tags_slug ON tags(slug);
 CREATE INDEX IF NOT EXISTS idx_messages_is_read ON messages(is_read);
 `);
+
+    dbInstance!
+      .prepare(
+        `
+      INSERT OR IGNORE INTO site_settings
+        (id, site_title, tagline, about_title, about_body_md, about_image_url, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `,
+      )
+      .run(
+        DEFAULT_SITE_SETTINGS.id,
+        DEFAULT_SITE_SETTINGS.site_title,
+        DEFAULT_SITE_SETTINGS.tagline,
+        DEFAULT_SITE_SETTINGS.about_title,
+        DEFAULT_SITE_SETTINGS.about_body_md,
+        DEFAULT_SITE_SETTINGS.about_image_url,
+      );
   });
 
   initDb();
@@ -307,4 +354,64 @@ export function adminStats(): { totalPosts: number; drafts: number; unreadMessag
     c: number;
   })?.c ?? 0) as number;
   return { totalPosts, drafts, unreadMessages };
+}
+
+export function getSiteSettings(): SiteSettings {
+  const db = getDb();
+  const row = db
+    .prepare(
+      `
+    SELECT id, site_title, tagline, about_title, about_body_md, about_image_url, updated_at
+    FROM site_settings
+    WHERE id = 1
+    LIMIT 1
+  `,
+    )
+    .get() as Partial<SiteSettings> | undefined;
+
+  if (!row) {
+    return {
+      ...DEFAULT_SITE_SETTINGS,
+      updated_at: null,
+    };
+  }
+
+  return {
+    id: 1,
+    site_title: String(row.site_title || DEFAULT_SITE_SETTINGS.site_title),
+    tagline: String(row.tagline || DEFAULT_SITE_SETTINGS.tagline),
+    about_title: String(row.about_title || DEFAULT_SITE_SETTINGS.about_title),
+    about_body_md: String(row.about_body_md || DEFAULT_SITE_SETTINGS.about_body_md),
+    about_image_url: String(row.about_image_url || DEFAULT_SITE_SETTINGS.about_image_url),
+    updated_at: row.updated_at ? String(row.updated_at) : null,
+  };
+}
+
+export function updateSiteSettings(input: {
+  site_title: string;
+  tagline: string;
+  about_title: string;
+  about_body_md: string;
+  about_image_url: string;
+}): void {
+  const db = getDb();
+  const result = db
+    .prepare(
+      `
+    UPDATE site_settings
+    SET site_title = ?, tagline = ?, about_title = ?, about_body_md = ?, about_image_url = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = 1
+  `,
+    )
+    .run(input.site_title, input.tagline, input.about_title, input.about_body_md, input.about_image_url);
+
+  if (result.changes === 0) {
+    db.prepare(
+      `
+      INSERT INTO site_settings
+        (id, site_title, tagline, about_title, about_body_md, about_image_url, updated_at)
+      VALUES (1, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `,
+    ).run(input.site_title, input.tagline, input.about_title, input.about_body_md, input.about_image_url);
+  }
 }

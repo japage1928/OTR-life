@@ -1,5 +1,8 @@
 <section class="admin-panel narrow">
   <h1>Admin Login</h1>
+  <% if (success) { %>
+    <div class="alert success"><%= success %></div>
+  <% } %>
   <% if (errors.length) { %>
     <div class="alert error">
       <ul>

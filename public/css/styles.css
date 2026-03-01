@@ -267,6 +267,48 @@ h3 {
   place-items: center;
 }
 
+.author-photo {
+  width: min(220px, 100%);
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  margin: 0 auto 1rem auto;
+  display: block;
+}
+
+.about-image {
+  width: 100%;
+  max-height: 380px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  margin: 0.8rem 0 1.2rem;
+}
+
+.about-contact-box {
+  margin-top: 2rem;
+  padding: 1rem 1.2rem;
+  background: rgba(217, 142, 4, 0.1);
+  border-left: 4px solid var(--accent);
+  border-radius: 0.4rem;
+}
+
+.about-contact-box p {
+  margin: 0;
+}
+
+.tool-result-card {
+  margin-bottom: 1rem;
+}
+
+.tool-output {
+  margin-bottom: 0.8rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  line-height: 1.45;
+  min-height: 220px;
+}
+
 .popular-list {
   list-style: none;
   margin: 0;
