@@ -1,5 +1,6 @@
 import { Router } from "express";
 import bcrypt from "bcrypt";
+import multer from "multer";
 import {
   adminStats,
   createPost,
@@ -10,11 +11,21 @@ import {
   listCategories,
   listTags,
   type PostInput,
+  saveImage,
   slugify,
   updateSiteSettings,
   updatePost,
 } from "../db";
 import { getAdminById, getAdminByUsername, requireAdmin, verifyPassword } from "../auth";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    cb(null, allowed.includes(file.mimetype));
+  },
+});
 
 const router = Router();
 
@@ -46,7 +57,9 @@ async function parsePostInput(body: Record<string, unknown>, existingId?: number
   const slug = await ensureUniqueSlug("posts", manualSlug || title, title, existingId);
 
   const status = getString(body.status) === "published" ? "published" : "draft";
-  const publishDate = getString(body.published_at);
+  const publishDateRaw = getString(body.published_at);
+  const parsedDate = publishDateRaw ? new Date(publishDateRaw) : null;
+  const publishDate = parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate.toISOString() : null;
 
   const categoryIdRaw = Number.parseInt(getString(body.category_id), 10);
   const categoryId = Number.isInteger(categoryIdRaw) && categoryIdRaw > 0 ? categoryIdRaw : null;
@@ -411,6 +424,18 @@ router.post("/api/tags/quick-create", async (req, res, next) => {
       [name, slug],
     );
     return res.json(result.rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/api/upload-image", requireAdmin, upload.single("image"), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No image file provided or file type not allowed (jpeg, png, webp, gif only)." });
+    }
+    const saved = await saveImage(req.file.originalname, req.file.mimetype, req.file.buffer);
+    return res.json({ url: `/media/${saved.id}`, id: saved.id });
   } catch (err) {
     next(err);
   }

@@ -22,9 +22,41 @@
     <label>Content (Markdown)
       <textarea name="content_md" rows="14" required><%= post?.content_md || '' %></textarea>
     </label>
-    <label>Cover image URL
-      <input type="url" name="cover_image" value="<%= post?.cover_image || '' %>" />
-    </label>
+
+    <div class="cover-image-field">
+      <label>Cover Image</label>
+
+      <% const existingImage = post?.cover_image || ''; %>
+      <% if (existingImage) { %>
+        <div id="img-preview-wrap" style="margin-bottom:.6rem;">
+          <img id="img-preview" src="<%= existingImage %>" alt="Current cover image"
+            style="max-width:100%;max-height:200px;border-radius:6px;border:1px solid var(--color-border,#333);" />
+        </div>
+      <% } else { %>
+        <div id="img-preview-wrap" style="margin-bottom:.6rem;display:none;">
+          <img id="img-preview" src="" alt="Cover image preview"
+            style="max-width:100%;max-height:200px;border-radius:6px;border:1px solid var(--color-border,#333);" />
+        </div>
+      <% } %>
+
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:.4rem;">
+        <label class="btn btn-sm" style="cursor:pointer;margin:0;">
+          Upload from device
+          <input id="img-file-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif"
+            style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;" />
+        </label>
+        <span id="img-upload-status" style="font-size:.85em;"></span>
+      </div>
+
+      <label style="font-size:.85em;color:var(--color-muted,#aaa);margin-top:.2rem;">
+        Or paste an image URL
+        <input type="url" id="cover-image-url-input" placeholder="https://example.com/photo.jpg"
+          value="<%= existingImage.startsWith('/media/') ? '' : existingImage %>" />
+      </label>
+
+      <input type="hidden" name="cover_image" id="cover-image-hidden"
+        value="<%= existingImage %>" />
+    </div>
 
     <div class="row gap">
       <label>Status
@@ -33,8 +65,9 @@
           <option value="published" <%= post?.status === 'published' ? 'selected' : '' %>>Published</option>
         </select>
       </label>
-      <label>Publish date (ISO)
-        <input type="text" name="published_at" value="<%= post?.published_at || '' %>" placeholder="2026-03-01T16:00:00.000Z" />
+      <label>Publish date
+        <input type="datetime-local" name="published_at" id="published-at-input"
+          value="<%= post?.published_at ? post.published_at.slice(0,16) : '' %>" />
       </label>
     </div>
 
@@ -86,27 +119,70 @@
   function showMsg(el, text, isError) {
     el.textContent = text;
     el.style.color = isError ? 'var(--color-danger, #e55)' : 'var(--color-success, #5a5)';
-    setTimeout(function () { el.textContent = ''; }, 3000);
+    setTimeout(function () { el.textContent = ''; }, 4000);
   }
 
-  document.getElementById('add-category-btn').addEventListener('click', async function () {
-    const input = document.getElementById('new-category-input');
-    const msg = document.getElementById('category-msg');
-    const name = input.value.trim();
-    if (!name) { showMsg(msg, 'Enter a name.', true); return; }
+  var fileInput = document.getElementById('img-file-input');
+  var urlInput  = document.getElementById('cover-image-url-input');
+  var hidden    = document.getElementById('cover-image-hidden');
+  var preview   = document.getElementById('img-preview');
+  var previewWrap = document.getElementById('img-preview-wrap');
+  var statusEl  = document.getElementById('img-upload-status');
 
+  function showPreview(src) {
+    preview.src = src;
+    previewWrap.style.display = '';
+  }
+
+  fileInput.addEventListener('change', async function () {
+    var file = this.files[0];
+    if (!file) return;
+    statusEl.textContent = 'Uploading\u2026';
+    statusEl.style.color = 'var(--color-muted, #aaa)';
+
+    var formData = new FormData();
+    formData.append('image', file);
+
+    try {
+      var res = await fetch('/admin/api/upload-image', { method: 'POST', body: formData });
+      var data = await res.json();
+      if (!res.ok) { showMsg(statusEl, data.error || 'Upload failed.', true); return; }
+      hidden.value = data.url;
+      urlInput.value = '';
+      showPreview(data.url);
+      showMsg(statusEl, 'Uploaded!', false);
+    } catch (e) {
+      showMsg(statusEl, 'Network error during upload.', true);
+    }
+  });
+
+  urlInput.addEventListener('input', function () {
+    var val = this.value.trim();
+    hidden.value = val;
+    if (val) {
+      showPreview(val);
+    } else {
+      previewWrap.style.display = 'none';
+      preview.src = '';
+    }
+  });
+
+  document.getElementById('add-category-btn').addEventListener('click', async function () {
+    var input = document.getElementById('new-category-input');
+    var msg = document.getElementById('category-msg');
+    var name = input.value.trim();
+    if (!name) { showMsg(msg, 'Enter a name.', true); return; }
     this.disabled = true;
     try {
-      const res = await fetch('/admin/api/categories/quick-create', {
+      var res = await fetch('/admin/api/categories/quick-create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name })
       });
-      const data = await res.json();
+      var data = await res.json();
       if (!res.ok) { showMsg(msg, data.error || 'Error.', true); return; }
-
-      const select = document.getElementById('category-select');
-      const opt = new Option(data.name, data.id, true, true);
+      var select = document.getElementById('category-select');
+      var opt = new Option(data.name, data.id, true, true);
       select.appendChild(opt);
       input.value = '';
       showMsg(msg, '"' + data.name + '" added and selected.', false);
@@ -122,23 +198,21 @@
   });
 
   document.getElementById('add-tag-btn').addEventListener('click', async function () {
-    const input = document.getElementById('new-tag-input');
-    const msg = document.getElementById('tag-msg');
-    const name = input.value.trim();
+    var input = document.getElementById('new-tag-input');
+    var msg = document.getElementById('tag-msg');
+    var name = input.value.trim();
     if (!name) { showMsg(msg, 'Enter a name.', true); return; }
-
     this.disabled = true;
     try {
-      const res = await fetch('/admin/api/tags/quick-create', {
+      var res = await fetch('/admin/api/tags/quick-create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name })
       });
-      const data = await res.json();
+      var data = await res.json();
       if (!res.ok) { showMsg(msg, data.error || 'Error.', true); return; }
-
-      const select = document.getElementById('tags-select');
-      const opt = new Option(data.name, data.id, true, true);
+      var select = document.getElementById('tags-select');
+      var opt = new Option(data.name, data.id, true, true);
       select.appendChild(opt);
       input.value = '';
       showMsg(msg, '"' + data.name + '" added and selected.', false);

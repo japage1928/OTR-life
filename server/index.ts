@@ -7,6 +7,7 @@ import expressLayouts from "express-ejs-layouts";
 import publicRoutes from "./routes/public";
 import toolsRoutes from "./routes/tools";
 import adminRoutes from "./routes/admin";
+import mediaRoutes from "./routes/media";
 import { runSeed } from "./seed";
 
 const app = express();
@@ -65,6 +66,7 @@ app.use((req, res, next) => {
 });
 
 app.use("/admin", adminRoutes);
+app.use("/media", mediaRoutes);
 app.use("/tools", toolsRoutes);
 app.use("/", publicRoutes);
 

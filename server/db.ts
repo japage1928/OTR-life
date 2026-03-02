@@ -114,7 +114,28 @@ export async function getPostById(id: number): Promise<any> {
   );
   const post = result.rows[0];
   if (!post) return null;
+  if (post.published_at instanceof Date) post.published_at = post.published_at.toISOString();
+  if (post.created_at instanceof Date) post.created_at = post.created_at.toISOString();
+  if (post.updated_at instanceof Date) post.updated_at = post.updated_at.toISOString();
   return { ...post, tag_ids: await getPostTagIds(id) };
+}
+
+export async function saveImage(
+  filename: string,
+  contentType: string,
+  data: Buffer,
+): Promise<{ id: number; filename: string; content_type: string }> {
+  const result = await getPool().query(
+    `INSERT INTO images (filename, content_type, data) VALUES ($1, $2, $3) RETURNING id, filename, content_type`,
+    [filename, contentType, data],
+  );
+  return result.rows[0];
+}
+
+export async function getImageById(id: number): Promise<{ content_type: string; data: Buffer } | null> {
+  const result = await getPool().query(`SELECT content_type, data FROM images WHERE id = $1`, [id]);
+  if (!result.rows[0]) return null;
+  return result.rows[0];
 }
 
 export async function getPublishedPostBySlug(slug: string): Promise<any> {
