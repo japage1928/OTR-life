@@ -1,0 +1,218 @@
+// Simple multi-stop mileage calculator
+// Geocoding: OpenStreetMap Nominatim
+// Routing distance: OSRM demo server (car profile)
+
+// ----- Config -----
+const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
+const OSRM_URL = "https://router.project-osrm.org/route/v1/driving";
+
+// User-Agent/Referer headers are not settable in browser fetch.
+// Nominatim asks for identifiable UA in heavy usage; for real traffic,
+// proxy this through your server and add proper headers + caching.
+
+// ----- Helpers -----
+const $ = (sel) => document.querySelector(sel);
+
+function milesFromMeters(m) {
+  return m / 1609.344;
+}
+
+function fmtMiles(mi) {
+  return `${mi.toFixed(1)} mi`;
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+  }[c]));
+}
+
+function setStatus(msg, isError = false) {
+  const el = $("#status");
+  el.textContent = msg;
+  el.className = `small ${isError ? "error" : ""}`;
+}
+
+function renderOutput(html) {
+  $("#output").innerHTML = html;
+}
+
+// ----- UI: Stops -----
+let stopCount = 0;
+
+function addStop(value = "") {
+  stopCount += 1;
+
+  const wrap = document.createElement("div");
+  wrap.className = "row";
+  wrap.dataset.stopRow = "1";
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = stopCount === 1 ? "Start (city/state or ZIP)" :
+                     stopCount === 2 ? "Stop / Destination" :
+                     `Stop ${stopCount}`;
+  input.value = value;
+
+  const remove = document.createElement("button");
+  remove.textContent = "Remove";
+  remove.addEventListener("click", () => {
+    wrap.remove();
+    renumberPlaceholders();
+  });
+
+  wrap.appendChild(input);
+  // Don’t allow removing if only 2 stops remain (needs at least start+end)
+  wrap.appendChild(remove);
+
+  $("#stops").appendChild(wrap);
+  updateRemoveButtons();
+}
+
+function getStopInputs() {
+  return Array.from(document.querySelectorAll('[data-stop-row="1"] input'));
+}
+
+function updateRemoveButtons() {
+  const rows = Array.from(document.querySelectorAll('[data-stop-row="1"]'));
+  const canRemove = rows.length > 2;
+  rows.forEach((row) => {
+    const btn = row.querySelector("button");
+    btn.disabled = !canRemove;
+    btn.style.opacity = canRemove ? "1" : "0.5";
+    btn.style.cursor = canRemove ? "pointer" : "not-allowed";
+  });
+}
+
+function renumberPlaceholders() {
+  const inputs = getStopInputs();
+  inputs.forEach((inp, idx) => {
+    if (idx === 0) inp.placeholder = "Start (city/state or ZIP)";
+    else if (idx === 1) inp.placeholder = "Stop / Destination";
+    else inp.placeholder = `Stop ${idx + 1}`;
+  });
+  updateRemoveButtons();
+}
+
+// ----- Geocode -----
+async function geocode(query) {
+  const q = query.trim();
+  if (!q) throw new Error("Empty stop");
+
+  // Nominatim parameters
+  const url = new URL(NOMINATIM_URL);
+  url.searchParams.set("q", q);
+  url.searchParams.set("format", "json");
+  url.searchParams.set("limit", "1");
+
+  const res = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      "Accept": "application/json",
+    }
+  });
+
+  if (!res.ok) throw new Error(`Geocoding failed for "${q}"`);
+  const data = await res.json();
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new Error(`Could not find "${q}"`);
+  }
+
+  const hit = data[0];
+  return {
+    query: q,
+    lat: Number(hit.lat),
+    lon: Number(hit.lon),
+    label: hit.display_name || q
+  };
+}
+
+// ----- Route distance between two points -----
+async function routeDistanceMeters(a, b) {
+  // OSRM expects: lon,lat;lon,lat
+  const coords = `${a.lon},${a.lat};${b.lon},${b.lat}`;
+  const url = `${OSRM_URL}/${coords}?overview=false&alternatives=false&steps=false`;
+
+  const res = await fetch(url, { headers: { "Accept": "application/json" } });
+  if (!res.ok) throw new Error(`Routing failed between "${a.query}" and "${b.query}"`);
+
+  const data = await res.json();
+  if (!data || data.code !== "Ok" || !data.routes?.length) {
+    throw new Error(`No route found between "${a.query}" and "${b.query}"`);
+  }
+
+  return data.routes[0].distance; // meters
+}
+
+// ----- Calculate -----
+async function calculate() {
+  renderOutput("");
+  setStatus("Working…");
+
+  const inputs = getStopInputs();
+  const rawStops = inputs.map(i => i.value.trim()).filter(Boolean);
+
+  if (rawStops.length < 2) {
+    setStatus("Add at least two stops (start + destination).", true);
+    return;
+  }
+
+  // Basic “don’t spam free services” delay
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  try {
+    // Geocode each stop sequentially (polite)
+    const points = [];
+    for (let i = 0; i < rawStops.length; i++) {
+      setStatus(`Geocoding stop ${i + 1} of ${rawStops.length}…`);
+      const p = await geocode(rawStops[i]);
+      points.push(p);
+      await sleep(250);
+    }
+
+    // Route legs sequentially
+    let totalMeters = 0;
+    const legs = [];
+
+    for (let i = 0; i < points.length - 1; i++) {
+      setStatus(`Routing leg ${i + 1} of ${points.length - 1}…`);
+      const meters = await routeDistanceMeters(points[i], points[i + 1]);
+      totalMeters += meters;
+      legs.push({ from: points[i], to: points[i + 1], meters });
+      await sleep(150);
+    }
+
+    const totalMiles = milesFromMeters(totalMeters);
+
+    // Render output
+    let html = `<div class="card" style="margin-top:12px;">
+      <div><strong>Total:</strong> ${fmtMiles(totalMiles)}</div>
+      <div class="small">Rough road miles based on public routing data.</div>
+      <hr style="border:0;border-top:1px solid #eee;margin:12px 0;" />
+      <div><strong>Legs:</strong></div>
+      <ul>
+    `;
+
+    for (const leg of legs) {
+      const mi = milesFromMeters(leg.meters);
+      html += `<li>
+        ${escapeHtml(leg.from.query)} → ${escapeHtml(leg.to.query)}: <strong>${fmtMiles(mi)}</strong>
+      </li>`;
+    }
+
+    html += `</ul></div>`;
+
+    renderOutput(html);
+    setStatus("Done.");
+  } catch (err) {
+    setStatus(err.message || "Something went wrong.", true);
+  }
+}
+
+// ----- Wire up -----
+$("#addStop").addEventListener("click", () => addStop(""));
+$("#calc").addEventListener("click", calculate);
+
+// Initial two stops
+addStop("");
+addStop("");

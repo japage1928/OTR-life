@@ -1,0 +1,200 @@
+<section class="panel">
+  <h1>Multi-Stop Mileage Calculator</h1>
+  <p class="muted">
+    Enter cities, states, or ZIP codes to get real driving miles across multiple stops.
+    Add as many stops as you need — it calculates each leg and the total.
+  </p>
+</section>
+
+<section class="card">
+  <div id="stops" class="stack" style="margin-bottom:1rem;"></div>
+
+  <div class="row gap" style="margin-bottom:1rem;">
+    <button class="btn btn-outline" id="addStop" type="button">+ Add Stop</button>
+    <button class="btn" id="calc" type="button">Calculate Miles</button>
+  </div>
+
+  <p id="status" class="small muted"></p>
+  <div id="output"></div>
+</section>
+
+<section class="card">
+  <h2>Tips</h2>
+  <p><strong>What format should I use?</strong><br />City and state works best (e.g., "Dallas, TX"). ZIP codes and full addresses also work.</p>
+  <p><strong>How accurate is it?</strong><br />Miles come from real road routing data, so they reflect actual driving distance — not straight-line miles.</p>
+  <p><strong>Can I add more than two stops?</strong><br />Yes. Hit "Add Stop" for each additional waypoint. The tool calculates every leg and adds them up.</p>
+  <p><strong>Does it account for my specific route?</strong><br />It finds the fastest car route between each stop. Truck-restricted roads may differ slightly.</p>
+</section>
+
+<style>
+  #stops .row { display: flex; gap: .5rem; align-items: center; }
+  #stops .row input { flex: 1; }
+  #stops .row button { white-space: nowrap; }
+  #output ul { padding-left: 1.2rem; margin: .5rem 0 0; }
+  #output li { margin-bottom: .25rem; }
+  #status.error { color: var(--color-danger, #e55); }
+</style>
+
+<script>
+(function () {
+
+const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
+const OSRM_URL      = "https://router.project-osrm.org/route/v1/driving";
+
+function milesFromMeters(m) { return m / 1609.344; }
+function fmtMiles(mi) { return `${mi.toFixed(1)} mi`; }
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
+}
+
+function setStatus(msg, isError) {
+  const el = document.getElementById("status");
+  el.textContent = msg;
+  el.className = "small" + (isError ? " error" : " muted");
+}
+
+function renderOutput(html) {
+  document.getElementById("output").innerHTML = html;
+}
+
+let stopCount = 0;
+
+function addStop(value) {
+  stopCount += 1;
+  const wrap = document.createElement("div");
+  wrap.className = "row";
+  wrap.dataset.stopRow = "1";
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = stopCount === 1 ? "Start (city/state or ZIP)" :
+                      stopCount === 2 ? "Destination" :
+                      `Stop ${stopCount}`;
+  input.value = value || "";
+
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.textContent = "Remove";
+  remove.className = "btn btn-sm btn-outline";
+  remove.addEventListener("click", function () {
+    wrap.remove();
+    renumber();
+  });
+
+  wrap.appendChild(input);
+  wrap.appendChild(remove);
+  document.getElementById("stops").appendChild(wrap);
+  updateRemove();
+}
+
+function getInputs() {
+  return Array.from(document.querySelectorAll('[data-stop-row="1"] input'));
+}
+
+function updateRemove() {
+  const rows = Array.from(document.querySelectorAll('[data-stop-row="1"]'));
+  const can = rows.length > 2;
+  rows.forEach(function (row) {
+    const btn = row.querySelector("button");
+    btn.disabled = !can;
+    btn.style.opacity = can ? "1" : "0.4";
+    btn.style.cursor  = can ? "pointer" : "not-allowed";
+  });
+}
+
+function renumber() {
+  const inputs = getInputs();
+  inputs.forEach(function (inp, idx) {
+    if (idx === 0) inp.placeholder = "Start (city/state or ZIP)";
+    else if (idx === inputs.length - 1) inp.placeholder = "Destination";
+    else inp.placeholder = `Stop ${idx + 1}`;
+  });
+  updateRemove();
+}
+
+async function geocode(query) {
+  const q = query.trim();
+  if (!q) throw new Error("Empty stop entered");
+  const url = new URL(NOMINATIM_URL);
+  url.searchParams.set("q", q);
+  url.searchParams.set("format", "json");
+  url.searchParams.set("limit", "1");
+  const res = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+  if (!res.ok) throw new Error(`Geocoding failed for "${q}"`);
+  const data = await res.json();
+  if (!Array.isArray(data) || !data.length) throw new Error(`Could not find location: "${q}"`);
+  return { query: q, lat: Number(data[0].lat), lon: Number(data[0].lon) };
+}
+
+async function routeMeters(a, b) {
+  const coords = `${a.lon},${a.lat};${b.lon},${b.lat}`;
+  const url = `${OSRM_URL}/${coords}?overview=false&alternatives=false&steps=false`;
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) throw new Error(`Routing failed: "${a.query}" to "${b.query}"`);
+  const data = await res.json();
+  if (!data || data.code !== "Ok" || !data.routes || !data.routes.length) {
+    throw new Error(`No route found: "${a.query}" to "${b.query}"`);
+  }
+  return data.routes[0].distance;
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function calculate() {
+  renderOutput("");
+  setStatus("Working\u2026", false);
+
+  const rawStops = getInputs().map((i) => i.value.trim()).filter(Boolean);
+  if (rawStops.length < 2) {
+    setStatus("Add at least a start and one destination.", true);
+    return;
+  }
+
+  try {
+    const points = [];
+    for (let i = 0; i < rawStops.length; i++) {
+      setStatus(`Geocoding stop ${i + 1} of ${rawStops.length}\u2026`, false);
+      points.push(await geocode(rawStops[i]));
+      if (i < rawStops.length - 1) await sleep(250);
+    }
+
+    let totalMeters = 0;
+    const legs = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      setStatus(`Calculating leg ${i + 1} of ${points.length - 1}\u2026`, false);
+      const meters = await routeMeters(points[i], points[i + 1]);
+      totalMeters += meters;
+      legs.push({ from: points[i].query, to: points[i + 1].query, meters });
+      if (i < points.length - 2) await sleep(150);
+    }
+
+    const totalMiles = milesFromMeters(totalMeters);
+
+    let html = `<div class="card" style="margin-top:1rem;">
+      <p style="font-size:1.2rem;"><strong>Total distance:</strong> ${fmtMiles(totalMiles)}</p>
+      <p class="small muted">Driving miles based on public road routing data.</p>
+      <hr style="border:0;border-top:1px solid var(--color-border,#333);margin:1rem 0;" />
+      <strong>Legs:</strong>
+      <ul>`;
+
+    for (const leg of legs) {
+      html += `<li>${escapeHtml(leg.from)} &rarr; ${escapeHtml(leg.to)}: <strong>${fmtMiles(milesFromMeters(leg.meters))}</strong></li>`;
+    }
+
+    html += `</ul></div>`;
+    renderOutput(html);
+    setStatus("Done.", false);
+  } catch (err) {
+    setStatus(err.message || "Something went wrong.", true);
+  }
+}
+
+document.getElementById("addStop").addEventListener("click", function () { addStop(""); });
+document.getElementById("calc").addEventListener("click", calculate);
+
+addStop("");
+addStop("");
+
+})();
+</script>

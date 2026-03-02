@@ -95,8 +95,18 @@ router.get("/", (req, res) => {
   res.render("public/tools/index", {
     ...pageMeta({
       title: "Tools for Truck Drivers | OTR Life",
-      description: "Free practical trucking tools: fuel cost calculator, route log cleaner, and ETA time zone helper.",
+      description: "Free practical trucking tools: fuel cost calculator, mileage calculator, route log cleaner, and ETA time zone helper.",
       canonical: `${getSiteUrl(req)}/tools`,
+    }),
+  });
+});
+
+router.get("/mileage-calculator", (req, res) => {
+  res.render("public/tools/mileage-calculator", {
+    ...pageMeta({
+      title: "Multi-Stop Mileage Calculator | OTR Life Tools",
+      description: "Calculate road miles between multiple stops using real routing data. Enter cities, states, or ZIP codes.",
+      canonical: `${getSiteUrl(req)}/tools/mileage-calculator`,
     }),
   });
 });
