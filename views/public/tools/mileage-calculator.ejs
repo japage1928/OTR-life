@@ -110,29 +110,37 @@ const STATE_ABBR = {
   wv:"West Virginia",wi:"Wisconsin",wy:"Wyoming",dc:"District of Columbia"
 };
 
-function buildQuery(raw) {
+function buildSearchParams(raw, limit) {
   const s = raw.trim().replace(/[''']/g, "");
-  if (/^\d{5}(-\d{4})?$/.test(s)) return s;
+  const base = { format: "json", countrycodes: "us", limit: String(limit || 1) };
+
+  if (/^\d{5}(-\d{4})?$/.test(s)) {
+    return Object.assign({}, base, { postalcode: s });
+  }
+
   const m = s.match(/^(.+?)[\s,]+([A-Za-z]{2})$/);
   if (m) {
     const abbr = m[2].toLowerCase();
-    if (STATE_ABBR[abbr]) {
-      return m[1].trim() + ", " + STATE_ABBR[abbr] + ", USA";
+    const stateName = STATE_ABBR[abbr];
+    if (stateName) {
+      return Object.assign({}, base, { city: m[1].trim(), state: stateName });
     }
   }
-  return s + ", USA";
+
+  return Object.assign({}, base, { q: s + ", USA" });
 }
 
 async function nominatimSearch(raw, limit) {
-  const q = buildQuery(raw);
+  const params = buildSearchParams(raw, limit);
   const url = new URL(NOMINATIM_URL);
-  url.searchParams.set("q", q);
-  url.searchParams.set("format", "json");
-  url.searchParams.set("limit", String(limit || 1));
-  url.searchParams.set("countrycodes", "us");
+  Object.entries(params).forEach(function (kv) { url.searchParams.set(kv[0], kv[1]); });
   const res = await fetch(url.toString(), { headers: { Accept: "application/json" } });
   if (!res.ok) throw new Error("Location lookup failed");
-  return res.json();
+  const results = await res.json();
+  if (!Array.isArray(results)) return [];
+  const PLACE_TYPES = ["city","town","village","hamlet","suburb","municipality","borough"];
+  const places = results.filter(function (r) { return r.class === "place" && PLACE_TYPES.indexOf(r.type) !== -1; });
+  return places.length ? places : results;
 }
 
 async function geocode(raw) {
