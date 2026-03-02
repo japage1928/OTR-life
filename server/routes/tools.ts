@@ -192,7 +192,7 @@ router.get("/fuel-cost", (req, res) => {
       description: "Estimate gallons used, total fuel spend, and cost per mile for a trip.",
       canonical: `${getSiteUrl(req)}/tools/fuel-cost`,
     }),
-    formData: { miles: "", mpg: "", diesel_price: "" },
+    formData: { miles: getString(req.query.miles as string | undefined), mpg: "", diesel_price: "" },
     errors: [] as string[],
     result: null as null | {
       gallons_used: string;
