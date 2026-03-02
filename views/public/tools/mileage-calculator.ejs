@@ -89,11 +89,12 @@ function renderOutput(html) {
 
 function shortLabel(displayName) {
   if (!displayName) return displayName;
-  const parts = displayName.split(",").map(function (p) { return p.trim(); });
+  const parts = displayName.split(",").map(function (p) { return p.trim(); })
+    .filter(function (p) { return p !== "United States" && p !== "USA"; });
   if (parts.length >= 2) {
-    return parts[0] + ", " + parts[1];
+    return parts[0] + ", " + parts[parts.length - 1];
   }
-  return parts[0];
+  return parts[0] || displayName;
 }
 
 const STATE_ABBR = {
