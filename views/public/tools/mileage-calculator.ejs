@@ -96,12 +96,35 @@ function shortLabel(displayName) {
   return parts[0];
 }
 
-function isZip(raw) {
-  return /^\d{5}(-\d{4})?$/.test(raw.trim());
+const STATE_ABBR = {
+  al:"Alabama",ak:"Alaska",az:"Arizona",ar:"Arkansas",ca:"California",
+  co:"Colorado",ct:"Connecticut",de:"Delaware",fl:"Florida",ga:"Georgia",
+  hi:"Hawaii",id:"Idaho",il:"Illinois",in:"Indiana",ia:"Iowa",
+  ks:"Kansas",ky:"Kentucky",la:"Louisiana",me:"Maine",md:"Maryland",
+  ma:"Massachusetts",mi:"Michigan",mn:"Minnesota",ms:"Mississippi",
+  mo:"Missouri",mt:"Montana",ne:"Nebraska",nv:"Nevada",nh:"New Hampshire",
+  nj:"New Jersey",nm:"New Mexico",ny:"New York",nc:"North Carolina",
+  nd:"North Dakota",oh:"Ohio",ok:"Oklahoma",or:"Oregon",pa:"Pennsylvania",
+  ri:"Rhode Island",sc:"South Carolina",sd:"South Dakota",tn:"Tennessee",
+  tx:"Texas",ut:"Utah",vt:"Vermont",va:"Virginia",wa:"Washington",
+  wv:"West Virginia",wi:"Wisconsin",wy:"Wyoming",dc:"District of Columbia"
+};
+
+function buildQuery(raw) {
+  const s = raw.trim().replace(/[''']/g, "");
+  if (/^\d{5}(-\d{4})?$/.test(s)) return s;
+  const m = s.match(/^(.+?)[\s,]+([A-Za-z]{2})$/);
+  if (m) {
+    const abbr = m[2].toLowerCase();
+    if (STATE_ABBR[abbr]) {
+      return m[1].trim() + ", " + STATE_ABBR[abbr] + ", USA";
+    }
+  }
+  return s + ", USA";
 }
 
 async function nominatimSearch(raw, limit) {
-  const q = isZip(raw) ? raw.trim() : raw.trim() + ", USA";
+  const q = buildQuery(raw);
   const url = new URL(NOMINATIM_URL);
   url.searchParams.set("q", q);
   url.searchParams.set("format", "json");
