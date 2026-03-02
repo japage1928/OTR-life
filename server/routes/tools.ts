@@ -108,6 +108,7 @@ router.get("/mileage-calculator", (req, res) => {
       description: "Calculate road miles between multiple stops using real routing data. Enter cities, states, or ZIP codes.",
       canonical: `${getSiteUrl(req)}/tools/mileage-calculator`,
     }),
+    mapboxToken: process.env.MAPBOX_TOKEN || "",
   });
 });
 

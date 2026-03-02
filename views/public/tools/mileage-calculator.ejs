@@ -7,20 +7,24 @@
 </section>
 
 <section class="card">
-  <div id="stops" class="stack" style="margin-bottom:1rem;"></div>
+  <% if (!mapboxToken) { %>
+    <div class="alert error"><p>Mileage calculator is not configured. Please contact the site admin.</p></div>
+  <% } else { %>
+    <div id="stops" class="stack" style="margin-bottom:1rem;"></div>
 
-  <div class="row gap" style="margin-bottom:1rem;">
-    <button class="btn btn-outline" id="addStop" type="button">+ Add Stop</button>
-    <button class="btn" id="calc" type="button">Calculate Miles</button>
-  </div>
+    <div class="row gap" style="margin-bottom:1rem;">
+      <button class="btn btn-outline" id="addStop" type="button">+ Add Stop</button>
+      <button class="btn" id="calc" type="button">Calculate Miles</button>
+    </div>
 
-  <p id="status" class="small muted"></p>
-  <div id="output"></div>
+    <p id="status" class="small muted"></p>
+    <div id="output"></div>
+  <% } %>
 </section>
 
 <section class="card">
   <h2>Tips</h2>
-  <p><strong>What format should I use?</strong><br />City and state works best (e.g., "Dallas, TX"). ZIP codes and full addresses also work.</p>
+  <p><strong>What format should I use?</strong><br />City and state works best (e.g., "Dallas, TX" or "Dallas TX"). ZIP codes also work.</p>
   <p><strong>How accurate is it?</strong><br />Miles come from real road routing data, so they reflect actual driving distance — not straight-line miles.</p>
   <p><strong>Can I add more than two stops?</strong><br />Yes. Hit "Add Stop" for each additional waypoint. The tool calculates every leg and adds them up.</p>
   <p><strong>Does it account for my specific route?</strong><br />It finds the fastest car route between each stop. Truck-restricted roads may differ slightly.</p>
@@ -58,27 +62,40 @@
   .ac-dropdown li:last-child { border-bottom: none; }
   .ac-dropdown li:hover,
   .ac-dropdown li.ac-active { background: var(--color-primary, #c8952a); color: #fff; }
-  .ac-dropdown li .ac-sub { font-size: .78rem; opacity: .75; display: block; margin-top: 1px; }
 </style>
 
+<% if (mapboxToken) { %>
 <script>
 (function () {
 
-const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
-const OSRM_URL      = "https://router.project-osrm.org/route/v1/driving";
-const AC_DEBOUNCE   = 350;
-const AC_MIN_CHARS  = 2;
-const AC_LIMIT      = 6;
+var MAPBOX_TOKEN = "<%= mapboxToken %>";
+var OSRM_URL     = "https://router.project-osrm.org/route/v1/driving";
+var AC_DEBOUNCE  = 350;
+var AC_MIN_CHARS = 2;
 
 function milesFromMeters(m) { return m / 1609.344; }
-function fmtMiles(mi) { return `${mi.toFixed(1)} mi`; }
+function fmtMiles(mi) { return mi.toFixed(1) + " mi"; }
 
 function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
+  return String(str).replace(/[&<>"']/g, function (c) {
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c];
+  });
+}
+
+function shortLabel(placeName) {
+  if (!placeName) return "";
+  var parts = placeName.split(",").map(function (p) { return p.trim(); });
+  var filtered = parts.filter(function (p) {
+    return p !== "United States" && p !== "USA";
+  });
+  if (filtered.length >= 2) {
+    return filtered[0] + ", " + filtered[filtered.length - 1];
+  }
+  return filtered[0] || placeName;
 }
 
 function setStatus(msg, isError) {
-  const el = document.getElementById("status");
+  var el = document.getElementById("status");
   el.textContent = msg;
   el.className = "small" + (isError ? " error" : " muted");
 }
@@ -86,84 +103,6 @@ function setStatus(msg, isError) {
 function renderOutput(html) {
   document.getElementById("output").innerHTML = html;
 }
-
-function shortLabel(displayName) {
-  if (!displayName) return displayName;
-  const parts = displayName.split(",").map(function (p) { return p.trim(); })
-    .filter(function (p) { return p !== "United States" && p !== "USA"; });
-  if (parts.length >= 2) {
-    return parts[0] + ", " + parts[parts.length - 1];
-  }
-  return parts[0] || displayName;
-}
-
-const STATE_ABBR = {
-  al:"Alabama",ak:"Alaska",az:"Arizona",ar:"Arkansas",ca:"California",
-  co:"Colorado",ct:"Connecticut",de:"Delaware",fl:"Florida",ga:"Georgia",
-  hi:"Hawaii",id:"Idaho",il:"Illinois",in:"Indiana",ia:"Iowa",
-  ks:"Kansas",ky:"Kentucky",la:"Louisiana",me:"Maine",md:"Maryland",
-  ma:"Massachusetts",mi:"Michigan",mn:"Minnesota",ms:"Mississippi",
-  mo:"Missouri",mt:"Montana",ne:"Nebraska",nv:"Nevada",nh:"New Hampshire",
-  nj:"New Jersey",nm:"New Mexico",ny:"New York",nc:"North Carolina",
-  nd:"North Dakota",oh:"Ohio",ok:"Oklahoma",or:"Oregon",pa:"Pennsylvania",
-  ri:"Rhode Island",sc:"South Carolina",sd:"South Dakota",tn:"Tennessee",
-  tx:"Texas",ut:"Utah",vt:"Vermont",va:"Virginia",wa:"Washington",
-  wv:"West Virginia",wi:"Wisconsin",wy:"Wyoming",dc:"District of Columbia"
-};
-
-function buildSearchParams(raw, limit) {
-  const s = raw.trim().replace(/[''']/g, "");
-  const base = { format: "json", countrycodes: "us", limit: String(limit || 1) };
-
-  if (/^\d{5}(-\d{4})?$/.test(s)) {
-    return Object.assign({}, base, { postalcode: s });
-  }
-
-  const m = s.match(/^(.+?)[\s,]+([A-Za-z]{2})$/);
-  if (m) {
-    const abbr = m[2].toLowerCase();
-    const stateName = STATE_ABBR[abbr];
-    if (stateName) {
-      return Object.assign({}, base, { city: m[1].trim(), state: stateName });
-    }
-  }
-
-  return Object.assign({}, base, { q: s + ", USA" });
-}
-
-async function nominatimSearch(raw, limit) {
-  const params = buildSearchParams(raw, limit);
-  const url = new URL(NOMINATIM_URL);
-  Object.entries(params).forEach(function (kv) { url.searchParams.set(kv[0], kv[1]); });
-  const res = await fetch(url.toString(), { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error("Location lookup failed");
-  const results = await res.json();
-  if (!Array.isArray(results)) return [];
-  const PLACE_TYPES = ["city","town","village","hamlet","suburb","municipality","borough"];
-  const places = results.filter(function (r) { return r.class === "place" && PLACE_TYPES.indexOf(r.type) !== -1; });
-  return places.length ? places : results;
-}
-
-async function geocode(raw) {
-  if (!raw.trim()) throw new Error("Empty stop");
-  const data = await nominatimSearch(raw, 1);
-  if (!Array.isArray(data) || !data.length) throw new Error(`Could not find location: "${raw}"`);
-  return { query: raw.trim(), lat: Number(data[0].lat), lon: Number(data[0].lon) };
-}
-
-async function routeMeters(a, b) {
-  const coords = `${a.lon},${a.lat};${b.lon},${b.lat}`;
-  const url = `${OSRM_URL}/${coords}?overview=false&alternatives=false&steps=false`;
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error(`Routing failed: "${a.query}" to "${b.query}"`);
-  const data = await res.json();
-  if (!data || data.code !== "Ok" || !data.routes || !data.routes.length) {
-    throw new Error(`No route found: "${a.query}" to "${b.query}"`);
-  }
-  return data.routes[0].distance;
-}
-
-const sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
 
 function closeAllDropdowns(except) {
   document.querySelectorAll(".ac-dropdown").forEach(function (dd) {
@@ -175,13 +114,49 @@ document.addEventListener("mousedown", function (e) {
   if (!e.target.closest(".stop-wrap")) closeAllDropdowns(null);
 });
 
+async function mapboxAutocomplete(query) {
+  var encoded = encodeURIComponent(query);
+  var url = "https://api.mapbox.com/geocoding/v5/mapbox.places/" + encoded +
+    ".json?access_token=" + MAPBOX_TOKEN +
+    "&types=place,locality,postcode&country=US&limit=6";
+  var res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) return [];
+  var data = await res.json();
+  return Array.isArray(data.features) ? data.features : [];
+}
+
+async function mapboxGeocode(query) {
+  var encoded = encodeURIComponent(query);
+  var url = "https://api.mapbox.com/geocoding/v5/mapbox.places/" + encoded +
+    ".json?access_token=" + MAPBOX_TOKEN +
+    "&types=place,locality,postcode&country=US&limit=1";
+  var res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) throw new Error("Location lookup failed");
+  var data = await res.json();
+  if (!data.features || !data.features.length) throw new Error("Could not find location: \"" + query + "\"");
+  var f = data.features[0];
+  return { query: shortLabel(f.place_name), lat: f.center[1], lon: f.center[0] };
+}
+
+async function routeMeters(a, b) {
+  var coords = a.lon + "," + a.lat + ";" + b.lon + "," + b.lat;
+  var url = OSRM_URL + "/" + coords + "?overview=false&alternatives=false&steps=false";
+  var res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) throw new Error("Routing failed: \"" + a.query + "\" to \"" + b.query + "\"");
+  var data = await res.json();
+  if (!data || data.code !== "Ok" || !data.routes || !data.routes.length) {
+    throw new Error("No route found: \"" + a.query + "\" to \"" + b.query + "\"");
+  }
+  return data.routes[0].distance;
+}
+
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
 function attachAutocomplete(input) {
   var timer = null;
   var activeIndex = -1;
 
-  function getDropdown() {
-    return input.parentElement.querySelector(".ac-dropdown");
-  }
+  function getDropdown() { return input.parentElement.querySelector(".ac-dropdown"); }
 
   function removeDropdown() {
     var dd = getDropdown();
@@ -189,23 +164,22 @@ function attachAutocomplete(input) {
     activeIndex = -1;
   }
 
-  function buildDropdown(results) {
+  function buildDropdown(features) {
     removeDropdown();
-    if (!results.length) return;
+    if (!features.length) return;
 
     var ul = document.createElement("ul");
     ul.className = "ac-dropdown";
 
-    results.forEach(function (hit, idx) {
+    features.forEach(function (feat, idx) {
+      var label = shortLabel(feat.place_name);
       var li = document.createElement("li");
-      var main = shortLabel(hit.display_name);
-      var sub = hit.display_name !== main ? hit.display_name : "";
-      li.innerHTML = escapeHtml(main) + (sub ? '<span class="ac-sub">' + escapeHtml(sub) + "</span>" : "");
+      li.textContent = label;
 
       li.addEventListener("mousedown", function (e) {
         e.preventDefault();
-        input.value = main;
-        input._coords = { lat: Number(hit.lat), lon: Number(hit.lon), query: main };
+        input.value = label;
+        input._coords = { lat: feat.center[1], lon: feat.center[0], query: label };
         removeDropdown();
         input.focus();
       });
@@ -221,9 +195,7 @@ function attachAutocomplete(input) {
     var dd = getDropdown();
     if (!dd) return;
     var items = dd.querySelectorAll("li");
-    items.forEach(function (li, i) {
-      li.classList.toggle("ac-active", i === newIndex);
-    });
+    items.forEach(function (li, i) { li.classList.toggle("ac-active", i === newIndex); });
     activeIndex = newIndex;
   }
 
@@ -234,8 +206,8 @@ function attachAutocomplete(input) {
     if (val.length < AC_MIN_CHARS) { removeDropdown(); return; }
     timer = setTimeout(async function () {
       try {
-        var results = await nominatimSearch(val, AC_LIMIT);
-        if (input.value.trim() === val) buildDropdown(results || []);
+        var features = await mapboxAutocomplete(val);
+        if (input.value.trim() === val) buildDropdown(features);
       } catch (_) { removeDropdown(); }
     }, AC_DEBOUNCE);
   });
@@ -263,36 +235,32 @@ function attachAutocomplete(input) {
   });
 }
 
-let stopCount = 0;
+var stopCount = 0;
 
 function addStop(value) {
   stopCount += 1;
 
-  const row = document.createElement("div");
+  var row = document.createElement("div");
   row.className = "row";
   row.dataset.stopRow = "1";
 
-  const wrap = document.createElement("div");
+  var wrap = document.createElement("div");
   wrap.className = "stop-wrap";
 
-  const input = document.createElement("input");
+  var input = document.createElement("input");
   input.type = "text";
-  input.placeholder = stopCount === 1 ? "Start (city/state or ZIP)" :
+  input.placeholder = stopCount === 1 ? "Start (city, state or ZIP)" :
                       stopCount === 2 ? "Destination" :
-                      `Stop ${stopCount}`;
+                      "Stop " + stopCount;
   input.value = value || "";
-
   wrap.appendChild(input);
   attachAutocomplete(input);
 
-  const remove = document.createElement("button");
+  var remove = document.createElement("button");
   remove.type = "button";
   remove.textContent = "Remove";
   remove.className = "btn btn-sm btn-outline";
-  remove.addEventListener("click", function () {
-    row.remove();
-    renumber();
-  });
+  remove.addEventListener("click", function () { row.remove(); renumber(); });
 
   row.appendChild(wrap);
   row.appendChild(remove);
@@ -305,10 +273,10 @@ function getInputs() {
 }
 
 function updateRemove() {
-  const rows = Array.from(document.querySelectorAll('[data-stop-row="1"]'));
-  const can = rows.length > 2;
+  var rows = Array.from(document.querySelectorAll('[data-stop-row="1"]'));
+  var can = rows.length > 2;
   rows.forEach(function (row) {
-    const btn = row.querySelector("button");
+    var btn = row.querySelector("button");
     btn.disabled = !can;
     btn.style.opacity = can ? "1" : "0.4";
     btn.style.cursor  = can ? "pointer" : "not-allowed";
@@ -316,11 +284,11 @@ function updateRemove() {
 }
 
 function renumber() {
-  const inputs = getInputs();
+  var inputs = getInputs();
   inputs.forEach(function (inp, idx) {
-    if (idx === 0) inp.placeholder = "Start (city/state or ZIP)";
+    if (idx === 0) inp.placeholder = "Start (city, state or ZIP)";
     else if (idx === inputs.length - 1) inp.placeholder = "Destination";
-    else inp.placeholder = `Stop ${idx + 1}`;
+    else inp.placeholder = "Stop " + (idx + 1);
   });
   updateRemove();
 }
@@ -330,51 +298,49 @@ async function calculate() {
   renderOutput("");
   setStatus("Working\u2026", false);
 
-  const inputs = getInputs();
-  const filled = inputs.filter(function (i) { return i.value.trim(); });
-  if (filled.length < 2) {
+  var inputs = getInputs().filter(function (i) { return i.value.trim(); });
+  if (inputs.length < 2) {
     setStatus("Add at least a start and one destination.", true);
     return;
   }
 
   try {
-    const points = [];
-    for (var i = 0; i < filled.length; i++) {
-      const inp = filled[i];
+    var points = [];
+    for (var i = 0; i < inputs.length; i++) {
+      var inp = inputs[i];
       if (inp._coords) {
         points.push(inp._coords);
       } else {
-        setStatus(`Locating stop ${i + 1} of ${filled.length}\u2026`, false);
-        const p = await geocode(inp.value);
+        setStatus("Locating stop " + (i + 1) + " of " + inputs.length + "\u2026", false);
+        var p = await mapboxGeocode(inp.value);
         points.push(p);
-        if (i < filled.length - 1) await sleep(250);
+        if (i < inputs.length - 1) await sleep(100);
       }
     }
 
-    let totalMeters = 0;
-    const legs = [];
+    var totalMeters = 0;
+    var legs = [];
     for (var j = 0; j < points.length - 1; j++) {
-      setStatus(`Calculating leg ${j + 1} of ${points.length - 1}\u2026`, false);
-      const meters = await routeMeters(points[j], points[j + 1]);
+      setStatus("Calculating leg " + (j + 1) + " of " + (points.length - 1) + "\u2026", false);
+      var meters = await routeMeters(points[j], points[j + 1]);
       totalMeters += meters;
-      legs.push({ from: points[j].query, to: points[j + 1].query, meters });
-      if (j < points.length - 2) await sleep(150);
+      legs.push({ from: points[j].query, to: points[j + 1].query, meters: meters });
+      if (j < points.length - 2) await sleep(100);
     }
 
-    const totalMiles = milesFromMeters(totalMeters);
+    var totalMiles = milesFromMeters(totalMeters);
+    var html = '<div class="card" style="margin-top:1rem;">' +
+      '<p style="font-size:1.2rem;"><strong>Total distance:</strong> ' + fmtMiles(totalMiles) + '</p>' +
+      '<p class="small muted">Driving miles based on public road routing data.</p>' +
+      '<hr style="border:0;border-top:1px solid var(--color-border,#333);margin:1rem 0;" />' +
+      '<strong>Legs:</strong><ul>';
 
-    let html = `<div class="card" style="margin-top:1rem;">
-      <p style="font-size:1.2rem;"><strong>Total distance:</strong> ${fmtMiles(totalMiles)}</p>
-      <p class="small muted">Driving miles based on public road routing data.</p>
-      <hr style="border:0;border-top:1px solid var(--color-border,#333);margin:1rem 0;" />
-      <strong>Legs:</strong>
-      <ul>`;
+    legs.forEach(function (leg) {
+      html += "<li>" + escapeHtml(leg.from) + " &rarr; " + escapeHtml(leg.to) +
+        ": <strong>" + fmtMiles(milesFromMeters(leg.meters)) + "</strong></li>";
+    });
 
-    for (const leg of legs) {
-      html += `<li>${escapeHtml(leg.from)} &rarr; ${escapeHtml(leg.to)}: <strong>${fmtMiles(milesFromMeters(leg.meters))}</strong></li>`;
-    }
-
-    html += `</ul></div>`;
+    html += "</ul></div>";
     renderOutput(html);
     setStatus("Done.", false);
   } catch (err) {
@@ -390,3 +356,4 @@ addStop("");
 
 })();
 </script>
+<% } %>
