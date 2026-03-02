@@ -7,7 +7,7 @@
 </section>
 
 <section class="card">
-  <% if (!mapboxToken) { %>
+  <% if (!hasMapbox) { %>
     <div class="alert error"><p>Mileage calculator is not configured. Please contact the site admin.</p></div>
   <% } else { %>
     <div id="stops" class="stack" style="margin-bottom:1rem;"></div>
@@ -64,12 +64,11 @@
   .ac-dropdown li.ac-active { background: var(--color-primary, #c8952a); color: #fff; }
 </style>
 
-<% if (mapboxToken) { %>
+<% if (hasMapbox) { %>
 <script>
 (function () {
 
-var MAPBOX_TOKEN = "<%= mapboxToken %>";
-var OSRM_URL     = "https://router.project-osrm.org/route/v1/driving";
+var OSRM_URL = "https://router.project-osrm.org/route/v1/driving";
 var AC_DEBOUNCE  = 350;
 var AC_MIN_CHARS = 2;
 
@@ -115,27 +114,20 @@ document.addEventListener("mousedown", function (e) {
 });
 
 async function mapboxAutocomplete(query) {
-  var encoded = encodeURIComponent(query);
-  var url = "https://api.mapbox.com/geocoding/v5/mapbox.places/" + encoded +
-    ".json?access_token=" + MAPBOX_TOKEN +
-    "&types=place,locality,postcode&country=US&limit=6";
-  var res = await fetch(url, { headers: { Accept: "application/json" } });
+  var res = await fetch("/tools/api/places?q=" + encodeURIComponent(query), { headers: { Accept: "application/json" } });
   if (!res.ok) return [];
   var data = await res.json();
-  return Array.isArray(data.features) ? data.features : [];
+  return Array.isArray(data) ? data : [];
 }
 
 async function mapboxGeocode(query) {
-  var encoded = encodeURIComponent(query);
-  var url = "https://api.mapbox.com/geocoding/v5/mapbox.places/" + encoded +
-    ".json?access_token=" + MAPBOX_TOKEN +
-    "&types=place,locality,postcode&country=US&limit=1";
-  var res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error("Location lookup failed");
+  var res = await fetch("/tools/api/geocode?q=" + encodeURIComponent(query), { headers: { Accept: "application/json" } });
+  if (!res.ok) {
+    var err = await res.json().catch(function () { return {}; });
+    throw new Error(err.error || "Could not find location: \"" + query + "\"");
+  }
   var data = await res.json();
-  if (!data.features || !data.features.length) throw new Error("Could not find location: \"" + query + "\"");
-  var f = data.features[0];
-  return { query: shortLabel(f.place_name), lat: f.center[1], lon: f.center[0] };
+  return { query: data.label, lat: data.lat, lon: data.lon };
 }
 
 async function routeMeters(a, b) {
@@ -200,8 +192,10 @@ function attachAutocomplete(input) {
   }
 
   input.addEventListener("input", function () {
-    delete input._coords;
     var val = input.value.trim();
+    if (input._coords && val !== input._coords.query) {
+      delete input._coords;
+    }
     clearTimeout(timer);
     if (val.length < AC_MIN_CHARS) { removeDropdown(); return; }
     timer = setTimeout(async function () {

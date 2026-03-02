@@ -3,6 +3,30 @@ import { getSiteSettings } from "../db";
 
 const router = Router();
 
+interface CacheEntry { data: unknown; expires: number }
+const geocodeCache = new Map<string, CacheEntry>();
+const CACHE_TTL = 24 * 60 * 60 * 1000;
+
+function cacheGet(key: string): unknown | null {
+  const entry = geocodeCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expires) { geocodeCache.delete(key); return null; }
+  return entry.data;
+}
+
+function cacheSet(key: string, data: unknown): void {
+  geocodeCache.set(key, { data, expires: Date.now() + CACHE_TTL });
+}
+
+async function mapboxFetch(path: string): Promise<unknown> {
+  const token = process.env.MAPBOX_TOKEN;
+  if (!token) throw new Error("MAPBOX_TOKEN not configured");
+  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${path}&access_token=${token}`;
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) throw new Error(`Mapbox error ${res.status}`);
+  return res.json();
+}
+
 router.use(async (_req, res, next) => {
   try {
     const settings = await getSiteSettings();
@@ -108,8 +132,57 @@ router.get("/mileage-calculator", (req, res) => {
       description: "Calculate road miles between multiple stops using real routing data. Enter cities, states, or ZIP codes.",
       canonical: `${getSiteUrl(req)}/tools/mileage-calculator`,
     }),
-    mapboxToken: process.env.MAPBOX_TOKEN || "",
+    hasMapbox: !!process.env.MAPBOX_TOKEN,
   });
+});
+
+router.get("/api/places", async (req, res, next) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    if (!q) return res.json([]);
+    if (!process.env.MAPBOX_TOKEN) return res.status(503).json({ error: "Geocoding not configured." });
+
+    const cacheKey = `places:${q.toLowerCase()}`;
+    const cached = cacheGet(cacheKey);
+    if (cached) return res.json(cached);
+
+    const encoded = encodeURIComponent(q);
+    const data: any = await mapboxFetch(`${encoded}.json?types=place,locality,postcode&country=US&limit=6`);
+    const features = Array.isArray(data?.features) ? data.features.map((f: any) => ({
+      place_name: f.place_name,
+      center: f.center,
+    })) : [];
+    cacheSet(cacheKey, features);
+    return res.json(features);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/api/geocode", async (req, res, next) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    if (!q) return res.status(400).json({ error: "Query required." });
+    if (!process.env.MAPBOX_TOKEN) return res.status(503).json({ error: "Geocoding not configured." });
+
+    const cacheKey = `geocode:${q.toLowerCase()}`;
+    const cached = cacheGet(cacheKey);
+    if (cached) return res.json(cached);
+
+    const encoded = encodeURIComponent(q);
+    const data: any = await mapboxFetch(`${encoded}.json?types=place,locality,postcode&country=US&limit=1`);
+    if (!data?.features?.length) return res.status(404).json({ error: `Could not find: "${q}"` });
+
+    const f = data.features[0];
+    const parts = (f.place_name as string).split(",").map((p: string) => p.trim())
+      .filter((p: string) => p !== "United States" && p !== "USA");
+    const label = parts.length >= 2 ? `${parts[0]}, ${parts[parts.length - 1]}` : parts[0] || f.place_name;
+    const result = { lat: f.center[1], lon: f.center[0], label };
+    cacheSet(cacheKey, result);
+    return res.json(result);
+  } catch (err) {
+    next(err);
+  }
 });
 
 router.get("/fuel-cost", (req, res) => {
