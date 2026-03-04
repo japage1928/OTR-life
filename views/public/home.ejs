@@ -4,31 +4,69 @@
   <a class="btn" href="/posts">Start Here</a>
 </section>
 
-<section class="home-section">
-  <h2 class="section-title">Latest Posts</h2>
-  <div class="post-stack">
-    <% latestPosts.forEach((post) => { %>
-      <article class="card post-card-vertical">
-        <% if (post.cover_image) { %>
-          <img src="<%= post.cover_image %>" alt="<%= post.title %>" class="cover post-cover" />
-        <% } else { %>
-          <div class="cover post-cover cover-fallback" aria-hidden="true"></div>
-        <% } %>
+<div class="home-layout">
 
-        <% if (post.category_name) { %>
-          <a href="/category/<%= post.category_slug %>" class="category-badge"><%= post.category_name %></a>
-        <% } %>
+  <aside class="home-sidebar">
+    <h2 class="section-title" style="margin-bottom:1.1rem;">Driver Tools</h2>
+    <div class="home-sidebar-tools">
 
-        <h3><a href="/post/<%= post.slug %>"><%= post.title %></a></h3>
-        <p class="muted"><%= post.excerpt %></p>
-        <div class="post-meta-row">
-          <a href="/post/<%= post.slug %>" class="read-more-link">Read More</a>
-          <span class="muted"><%= formatDate(post.published_at) %></span>
-        </div>
+      <article class="card tool-card-mini">
+        <h3>Mileage Calculator</h3>
+        <p class="muted">Real road miles across multiple stops — city, state, or ZIP.</p>
+        <a class="btn btn-outline btn-sm" href="/tools/mileage-calculator">Open Tool</a>
       </article>
-    <% }) %>
-  </div>
-</section>
+
+      <article class="card tool-card-mini">
+        <h3>Fuel Cost Estimator</h3>
+        <p class="muted">Gallons used, total spend, and cost-per-mile before you roll.</p>
+        <a class="btn btn-outline btn-sm" href="/tools/fuel-cost">Open Tool</a>
+      </article>
+
+      <article class="card tool-card-mini">
+        <h3>ETA + Time Zone Helper</h3>
+        <p class="muted">Departure time, drive hours, breaks — get your arrival across zones.</p>
+        <a class="btn btn-outline btn-sm" href="/tools/eta-timezone">Open Tool</a>
+      </article>
+
+      <article class="card tool-card-mini">
+        <h3>Route Log Converter</h3>
+        <p class="muted">Paste rough trip notes and get a clean log ready to copy.</p>
+        <a class="btn btn-outline btn-sm" href="/tools/route-log">Open Tool</a>
+      </article>
+
+      <a class="btn btn-outline" href="/tools" style="text-align:center;">All Tools &rarr;</a>
+    </div>
+  </aside>
+
+  <main>
+    <h2 class="section-title" style="margin-bottom:1.1rem;">Latest Articles</h2>
+    <% if (latestPosts.length === 0) { %>
+      <p class="muted">No posts yet. Check back soon.</p>
+    <% } else { %>
+      <div class="home-article-list">
+        <% latestPosts.forEach((post) => { %>
+          <article class="home-article-item">
+            <div class="home-article-meta">
+              <span class="small muted"><%= formatDate(post.published_at) %></span>
+              <% if (post.category_name) { %>
+                <a href="/category/<%= post.category_slug %>" class="category-badge"><%= post.category_name %></a>
+              <% } %>
+            </div>
+            <h3><a href="/post/<%= post.slug %>"><%= post.title %></a></h3>
+            <% if (post.excerpt) { %>
+              <p class="excerpt"><%= post.excerpt %></p>
+            <% } %>
+            <a href="/post/<%= post.slug %>" class="read-more-link small">Read More &rarr;</a>
+          </article>
+        <% }) %>
+      </div>
+      <div style="margin-top:1.25rem;">
+        <a class="btn btn-outline" href="/posts">All Articles &rarr;</a>
+      </div>
+    <% } %>
+  </main>
+
+</div>
 
 <section class="card author-card">
   <% if (settings.about_image_url) { %>
@@ -39,25 +77,6 @@
   <h3><%= settings.about_title || "About OTR Life" %></h3>
   <p class="muted"><%= aboutPreview || "Field-tested guidance for real schedules, budgets, and truck-stop conditions." %></p>
   <a href="/about" class="read-more-link">Read my story</a>
-</section>
-
-<section class="home-section">
-  <h2 class="section-title">Popular Now</h2>
-  <div class="card popular-list-card">
-    <ul class="popular-list">
-      <% latestPosts.slice(0, 3).forEach((post) => { %>
-        <li>
-          <% if (post.cover_image) { %>
-            <img src="<%= post.cover_image %>" alt="" class="popular-thumb" />
-          <% } %>
-          <div>
-            <a href="/post/<%= post.slug %>"><%= post.title %></a>
-            <p class="muted"><%= formatDate(post.published_at) %></p>
-          </div>
-        </li>
-      <% }) %>
-    </ul>
-  </div>
 </section>
 
 <section class="home-section">

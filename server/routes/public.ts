@@ -68,7 +68,7 @@ router.get("/", async (req, res, next) => {
          LEFT JOIN categories c ON c.id = p.category_id
          WHERE p.status = 'published'
          ORDER BY p.published_at DESC NULLS LAST, p.id DESC
-         LIMIT 6`,
+         LIMIT 12`,
       ),
       db.query(
         `SELECT c.id, c.name, c.slug, COUNT(p.id) AS post_count
