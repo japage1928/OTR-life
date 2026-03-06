@@ -1,0 +1,968 @@
+// ==============================
+// FILE: src/config/internalLinkingConfig.ts
+// ==============================
+
+export type LinkTarget = {
+  title: string;
+  url: string;
+  keywords: string[];
+};
+
+export type ClusterConfig = {
+  name: string;
+  keywords: string[];
+  primaryTool: LinkTarget;
+  relatedArticles: LinkTarget[];
+  includeToolsHub?: boolean;
+};
+
+export const TOOLS_HUB_URL = "/tools";
+
+export const INTERNAL_LINKING_CONFIG: ClusterConfig[] = [
+  {
+    name: "mileage",
+    keywords: [
+      "mileage",
+      "miles",
+      "route planning",
+      "trip planning",
+      "multi-stop",
+      "zip to zip",
+      "route miles"
+    ],
+    primaryTool: {
+      title: "Multi-Stop Mileage Calculator",
+      url: "/tools/mileage-calculator",
+      keywords: ["mileage calculator", "multi-stop mileage", "route miles", "miles"]
+    },
+    relatedArticles: [
+      {
+        title: "Why Accurate Mileage Matters More Than You Think in OTR Trucking",
+        url: "/post/why-accurate-mileage-matters-more-than-you-think-in-otr-trucking",
+        keywords: ["accurate mileage", "mileage matters", "route miles"]
+      },
+      {
+        title: "How OTR Drivers Plan a Week-Long Route Without Losing Hours",
+        url: "/post/how-otr-drivers-plan-a-week-long-route-without-losing-hours",
+        keywords: ["week-long route", "route planning", "trip planning"]
+      }
+    ],
+    includeToolsHub: true
+  },
+  {
+    name: "fuel",
+    keywords: [
+      "fuel",
+      "diesel",
+      "mpg",
+      "cost per mile",
+      "idling",
+      "fuel cost",
+      "profits"
+    ],
+    primaryTool: {
+      title: "Fuel Cost Estimator",
+      url: "/tools/fuel-cost",
+      keywords: ["fuel cost", "diesel cost", "cost per mile", "fuel estimator"]
+    },
+    relatedArticles: [
+      {
+        title: "How Much Fuel Really Costs an OTR Driver in 2026",
+        url: "/post/how-much-fuel-really-costs-an-otr-driver-in-2026",
+        keywords: ["fuel costs", "diesel costs", "otr fuel"]
+      },
+      {
+        title: "Why MPG Matters More Than You Think in OTR Trucking",
+        url: "/post/why-mpg-matters-more-than-you-think-in-otr-trucking",
+        keywords: ["mpg", "fuel economy", "miles per gallon"]
+      }
+    ],
+    includeToolsHub: true
+  },
+  {
+    name: "eta",
+    keywords: [
+      "eta",
+      "arrival time",
+      "time zone",
+      "appointment",
+      "schedule",
+      "late",
+      "delivery time"
+    ],
+    primaryTool: {
+      title: "ETA + Time Zone Helper",
+      url: "/tools/eta-timezone",
+      keywords: ["eta", "time zone", "arrival time", "schedule"]
+    },
+    relatedArticles: [
+      {
+        title: "How to Calculate Your Real Arrival Time Across Time Zones (Truckers Guide)",
+        url: "/post/how-to-calculate-your-real-arrival-time-across-time-zones-truckers-guide",
+        keywords: ["arrival time", "time zones", "eta"]
+      },
+      {
+        title: "How Time Zones and ETA Mistakes Can Ruin a Trucking Schedule",
+        url: "/post/how-time-zones-and-eta-mistakes-can-ruin-a-trucking-schedule",
+        keywords: ["eta mistakes", "schedule", "time zones"]
+      }
+    ],
+    includeToolsHub: true
+  },
+  {
+    name: "route-log",
+    keywords: [
+      "route log",
+      "trip notes",
+      "trip log",
+      "notes",
+      "route records",
+      "route history"
+    ],
+    primaryTool: {
+      title: "Route Log Converter",
+      url: "/tools/route-log-converter",
+      keywords: ["route log", "trip notes", "route converter", "trip records"]
+    },
+    relatedArticles: [
+      {
+        title: "How to Organize Your Truck Trip Notes Without Losing Track of Your Routes",
+        url: "/post/how-to-organize-your-truck-trip-notes-without-losing-track-of-your-routes",
+        keywords: ["trip notes", "organize notes", "routes"]
+      },
+      {
+        title: "Why Smart Truck Drivers Keep Route Logs for Every Trip",
+        url: "/post/why-smart-truck-drivers-keep-route-logs-for-every-trip",
+        keywords: ["route logs", "every trip", "trip records"]
+      }
+    ],
+    includeToolsHub: true
+  }
+];
+
+
+// ==============================
+// FILE: src/lib/internalLinker/types.ts
+// ==============================
+
+export type PostRecord = {
+  id: number;
+  title: string;
+  slug: string;
+  excerpt?: string | null;
+  content: string;
+  tags?: string | null;
+  status?: string | null;
+};
+
+export type ClusterMatch = {
+  clusterName: string;
+  score: number;
+};
+
+export type SelectedLink = {
+  type: "primary-tool" | "related-article" | "tools-hub";
+  title: string;
+  url: string;
+  keywords: string[];
+};
+
+export type InjectionRecord = {
+  type: SelectedLink["type"];
+  title: string;
+  url: string;
+  anchorText: string;
+  inserted: boolean;
+  reason?: string;
+};
+
+export type LinkerRunResult = {
+  postId: number;
+  postTitle: string;
+  clusterName: string | null;
+  clusterScore: number;
+  mode: "dry-run" | "apply";
+  updatedContent: string;
+  changed: boolean;
+  injections: InjectionRecord[];
+  notes: string[];
+};
+
+
+// ==============================
+// FILE: src/lib/internalLinker/scorePost.ts
+// ==============================
+
+import { INTERNAL_LINKING_CONFIG } from "../../config/internalLinkingConfig";
+import type { ClusterMatch, PostRecord } from "./types";
+
+function normalize(text: string): string {
+  return text.toLowerCase();
+}
+
+function countKeywordHits(haystack: string, keywords: string[]): number {
+  let score = 0;
+
+  for (const kw of keywords) {
+    const pattern = new RegExp(
+      `\\b${kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+      "gi"
+    );
+    const matches = haystack.match(pattern);
+    if (matches) score += matches.length;
+  }
+
+  return score;
+}
+
+export function scorePostAgainstClusters(post: PostRecord): ClusterMatch[] {
+  const title = normalize(post.title || "");
+  const slug = normalize(post.slug || "");
+  const excerpt = normalize(post.excerpt || "");
+  const content = normalize(post.content || "");
+  const tags = normalize(post.tags || "");
+
+  const results: ClusterMatch[] = INTERNAL_LINKING_CONFIG.map((cluster) => {
+    const titleHits = countKeywordHits(title, cluster.keywords) * 5;
+    const slugHits = countKeywordHits(slug, cluster.keywords) * 4;
+    const tagHits = countKeywordHits(tags, cluster.keywords) * 4;
+    const excerptHits = countKeywordHits(excerpt, cluster.keywords) * 3;
+    const contentHits = countKeywordHits(content, cluster.keywords) * 1;
+
+    return {
+      clusterName: cluster.name,
+      score: titleHits + slugHits + tagHits + excerptHits + contentHits
+    };
+  });
+
+  return results.sort((a, b) => b.score - a.score);
+}
+
+
+// ==============================
+// FILE: src/lib/internalLinker/selectLinks.ts
+// ==============================
+
+import { INTERNAL_LINKING_CONFIG, TOOLS_HUB_URL } from "../../config/internalLinkingConfig";
+import type { PostRecord, SelectedLink } from "./types";
+
+export function selectLinksForPost(post: PostRecord, clusterName: string): SelectedLink[] {
+  const cluster = INTERNAL_LINKING_CONFIG.find((c) => c.name === clusterName);
+  if (!cluster) return [];
+
+  const currentPostUrl = `/post/${post.slug}`;
+  const selected: SelectedLink[] = [];
+
+  selected.push({
+    type: "primary-tool",
+    title: cluster.primaryTool.title,
+    url: cluster.primaryTool.url,
+    keywords: cluster.primaryTool.keywords
+  });
+
+  for (const article of cluster.relatedArticles) {
+    if (article.url === currentPostUrl) continue;
+
+    selected.push({
+      type: "related-article",
+      title: article.title,
+      url: article.url,
+      keywords: article.keywords
+    });
+
+    if (selected.filter((x) => x.type === "related-article").length >= 2) break;
+  }
+
+  if (cluster.includeToolsHub) {
+    selected.push({
+      type: "tools-hub",
+      title: "Apps & Tools",
+      url: TOOLS_HUB_URL,
+      keywords: ["tools", "apps & tools", "free tools"]
+    });
+  }
+
+  return selected.slice(0, 4);
+}
+
+
+// ==============================
+// FILE: src/lib/internalLinker/injectLinks.ts
+// ==============================
+
+import type { InjectionRecord, SelectedLink } from "./types";
+
+type InjectOptions = {
+  maxLinks: number;
+};
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasUrl(content: string, url: string): boolean {
+  return content.includes(`href="${url}"`) || content.includes(`](${url})`);
+}
+
+function splitByProtectedBlocks(content: string): string[] {
+  const protectedPattern =
+    /(```[\s\S]*?```|`[^`]*`|<a\b[\s\S]*?<\/a>|!$begin:math:display$\[\^$end:math:display$]*\]$begin:math:text$\[\^\)\]\+$end:math:text$|^#{1,6}\s.*$)/gm;
+  return content.split(protectedPattern);
+}
+
+function getProtectedMatches(content: string): string[] {
+  const protectedPattern =
+    /(```[\s\S]*?```|`[^`]*`|<a\b[\s\S]*?<\/a>|!\[[^\]]*\]\([^)]+\)|^#{1,6}\s.*$)/gm;
+  return content.match(protectedPattern) || [];
+}
+
+function rebuildContent(unprotected: string[], protectedParts: string[]): string {
+  let result = "";
+  const maxLen = Math.max(unprotected.length, protectedParts.length);
+
+  for (let i = 0; i < maxLen; i++) {
+    if (i < unprotected.length) result += unprotected[i];
+    if (i < protectedParts.length) result += protectedParts[i];
+  }
+
+  return result;
+}
+
+function injectMarkdownLink(
+  text: string,
+  link: SelectedLink
+): { text: string; inserted: boolean; anchorText?: string } {
+  for (const keyword of link.keywords) {
+    const pattern = new RegExp(`\\b(${escapeRegex(keyword)})\\b`, "i");
+    const match = text.match(pattern);
+    if (!match) continue;
+
+    const anchorText = match[1];
+
+    const sentencePattern = new RegExp(
+      `([^.!?\\n]*?)\\b${escapeRegex(anchorText)}\\b([^.!?\\n]*[.!?]?)`,
+      "i"
+    );
+    const sentenceMatch = text.match(sentencePattern);
+
+    if (sentenceMatch) {
+      const fullSentence = sentenceMatch[0];
+      const existingMarkdownLinksInSentence = (fullSentence.match(/\[[^\]]+\]\([^)]+\)/g) || []).length;
+      const existingHtmlLinksInSentence = (fullSentence.match(/<a\b[\s\S]*?<\/a>/g) || []).length;
+
+      if (existingMarkdownLinksInSentence + existingHtmlLinksInSentence > 0) {
+        continue;
+      }
+    }
+
+    const replacement = `[${anchorText}](${link.url})`;
+
+    return {
+      text: text.replace(pattern, replacement),
+      inserted: true,
+      anchorText
+    };
+  }
+
+  return { text, inserted: false };
+}
+
+export function injectInternalLinks(
+  originalContent: string,
+  selectedLinks: SelectedLink[],
+  options: InjectOptions = { maxLinks: 4 }
+): { updatedContent: string; injections: InjectionRecord[] } {
+  let content = originalContent;
+  const injections: InjectionRecord[] = [];
+  const usedTargets = new Set<string>();
+
+  const protectedParts = getProtectedMatches(content);
+  let unprotectedParts = splitByProtectedBlocks(content);
+
+  let insertedCount = 0;
+
+  for (const link of selectedLinks) {
+    if (insertedCount >= options.maxLinks) {
+      injections.push({
+        type: link.type,
+        title: link.title,
+        url: link.url,
+        anchorText: "",
+        inserted: false,
+        reason: "max_links_reached"
+      });
+      continue;
+    }
+
+    if (usedTargets.has(link.url)) {
+      injections.push({
+        type: link.type,
+        title: link.title,
+        url: link.url,
+        anchorText: "",
+        inserted: false,
+        reason: "duplicate_target"
+      });
+      continue;
+    }
+
+    if (hasUrl(content, link.url)) {
+      injections.push({
+        type: link.type,
+        title: link.title,
+        url: link.url,
+        anchorText: "",
+        inserted: false,
+        reason: "already_exists"
+      });
+      usedTargets.add(link.url);
+      continue;
+    }
+
+    let linked = false;
+
+    for (let i = 0; i < unprotectedParts.length; i++) {
+      const part = unprotectedParts[i];
+      const result = injectMarkdownLink(part, link);
+
+      if (result.inserted) {
+        unprotectedParts[i] = result.text;
+        linked = true;
+        insertedCount++;
+        usedTargets.add(link.url);
+
+        injections.push({
+          type: link.type,
+          title: link.title,
+          url: link.url,
+          anchorText: result.anchorText || "",
+          inserted: true
+        });
+
+        break;
+      }
+    }
+
+    if (!linked) {
+      injections.push({
+        type: link.type,
+        title: link.title,
+        url: link.url,
+        anchorText: "",
+        inserted: false,
+        reason: "no_safe_anchor_found"
+      });
+    }
+
+    content = rebuildContent(unprotectedParts, protectedParts);
+  }
+
+  return {
+    updatedContent: content,
+    injections
+  };
+}
+
+
+// ==============================
+// FILE: src/lib/internalLinker/logger.ts
+// ==============================
+
+import { db } from "../db";
+import type { LinkerRunResult } from "./types";
+
+export async function logInternalLinkerRun(result: LinkerRunResult): Promise<void> {
+  await db.run(
+    `
+    INSERT INTO internal_linker_logs
+    (post_id, post_title, cluster_name, cluster_score, mode, changed, injections_json, notes_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    [
+      result.postId,
+      result.postTitle,
+      result.clusterName,
+      result.clusterScore,
+      result.mode,
+      result.changed ? 1 : 0,
+      JSON.stringify(result.injections),
+      JSON.stringify(result.notes)
+    ]
+  );
+}
+
+
+// ==============================
+// FILE: src/lib/internalLinker/runInternalLinker.ts
+// ==============================
+
+import { db } from "../db";
+import { scorePostAgainstClusters } from "./scorePost";
+import { selectLinksForPost } from "./selectLinks";
+import { injectInternalLinks } from "./injectLinks";
+import { logInternalLinkerRun } from "./logger";
+import type { LinkerRunResult, PostRecord } from "./types";
+
+const MIN_CLUSTER_SCORE = 3;
+const MIN_CONTENT_LENGTH = 300;
+
+export async function getAllPublishedPosts(): Promise<PostRecord[]> {
+  return db.all<PostRecord[]>(
+    `
+    SELECT id, title, slug, excerpt, content, tags, status
+    FROM posts
+    WHERE status = 'published'
+    ORDER BY id DESC
+    `
+  );
+}
+
+export async function getPostById(postId: number): Promise<PostRecord | undefined> {
+  return db.get<PostRecord>(
+    `
+    SELECT id, title, slug, excerpt, content, tags, status
+    FROM posts
+    WHERE id = ?
+    `,
+    [postId]
+  );
+}
+
+export async function updatePostContent(postId: number, content: string): Promise<void> {
+  await db.run(
+    `
+    UPDATE posts
+    SET content = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+    `,
+    [content, postId]
+  );
+}
+
+export async function runInternalLinkerForPost(
+  post: PostRecord,
+  mode: "dry-run" | "apply"
+): Promise<LinkerRunResult> {
+  const notes: string[] = [];
+
+  if (!post.content || post.content.trim().length < MIN_CONTENT_LENGTH) {
+    const result: LinkerRunResult = {
+      postId: post.id,
+      postTitle: post.title,
+      clusterName: null,
+      clusterScore: 0,
+      mode,
+      updatedContent: post.content,
+      changed: false,
+      injections: [],
+      notes: ["post_too_short"]
+    };
+
+    await logInternalLinkerRun(result);
+    return result;
+  }
+
+  const matches = scorePostAgainstClusters(post);
+  const best = matches[0];
+
+  if (!best || best.score < MIN_CLUSTER_SCORE) {
+    const result: LinkerRunResult = {
+      postId: post.id,
+      postTitle: post.title,
+      clusterName: null,
+      clusterScore: best?.score || 0,
+      mode,
+      updatedContent: post.content,
+      changed: false,
+      injections: [],
+      notes: ["no_cluster_confident_match"]
+    };
+
+    await logInternalLinkerRun(result);
+    return result;
+  }
+
+  const selectedLinks = selectLinksForPost(post, best.clusterName);
+  const { updatedContent, injections } = injectInternalLinks(post.content, selectedLinks, {
+    maxLinks: 4
+  });
+
+  const changed = updatedContent !== post.content;
+
+  if (!changed) {
+    notes.push("no_changes_made");
+  }
+
+  if (mode === "apply" && changed) {
+    await updatePostContent(post.id, updatedContent);
+    notes.push("content_updated");
+  }
+
+  const result: LinkerRunResult = {
+    postId: post.id,
+    postTitle: post.title,
+    clusterName: best.clusterName,
+    clusterScore: best.score,
+    mode,
+    updatedContent,
+    changed,
+    injections,
+    notes
+  };
+
+  await logInternalLinkerRun(result);
+  return result;
+}
+
+export async function runInternalLinkerBatch(
+  mode: "dry-run" | "apply",
+  limit = 25
+): Promise<LinkerRunResult[]> {
+  const posts = await getAllPublishedPosts();
+  const sliced = posts.slice(0, limit);
+
+  const results: LinkerRunResult[] = [];
+
+  for (const post of sliced) {
+    const result = await runInternalLinkerForPost(post, mode);
+    results.push(result);
+  }
+
+  return results;
+}
+
+
+// ==============================
+// FILE: src/lib/db.ts
+// ==============================
+
+import sqlite3 from "sqlite3";
+import { open } from "sqlite";
+
+export const db = await open({
+  filename: "./data/site.db",
+  driver: sqlite3.Database
+});
+
+
+// ==============================
+// FILE: src/routes/admin.internal-linker.ts
+// ==============================
+
+import { Router } from "express";
+import { db } from "../lib/db";
+import {
+  getPostById,
+  runInternalLinkerBatch,
+  runInternalLinkerForPost
+} from "../lib/internalLinker/runInternalLinker";
+
+const router = Router();
+
+router.get("/admin/internal-linker", async (_req, res, next) => {
+  try {
+    const posts = await db.all(`
+      SELECT id, title, slug, status, updated_at
+      FROM posts
+      ORDER BY id DESC
+      LIMIT 50
+    `);
+
+    const logs = await db.all(`
+      SELECT *
+      FROM internal_linker_logs
+      ORDER BY id DESC
+      LIMIT 50
+    `);
+
+    res.render("admin/internal-linker", {
+      posts,
+      logs,
+      results: []
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/internal-linker/post/:id/dry-run", async (req, res, next) => {
+  try {
+    const postId = Number(req.params.id);
+    const post = await getPostById(postId);
+
+    if (!post) {
+      return res.status(404).send("Post not found");
+    }
+
+    const result = await runInternalLinkerForPost(post, "dry-run");
+
+    const posts = await db.all(`
+      SELECT id, title, slug, status, updated_at
+      FROM posts
+      ORDER BY id DESC
+      LIMIT 50
+    `);
+
+    const logs = await db.all(`
+      SELECT *
+      FROM internal_linker_logs
+      ORDER BY id DESC
+      LIMIT 50
+    `);
+
+    res.render("admin/internal-linker", {
+      posts,
+      logs,
+      results: [result]
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/internal-linker/post/:id/apply", async (req, res, next) => {
+  try {
+    const postId = Number(req.params.id);
+    const post = await getPostById(postId);
+
+    if (!post) {
+      return res.status(404).send("Post not found");
+    }
+
+    const result = await runInternalLinkerForPost(post, "apply");
+
+    const posts = await db.all(`
+      SELECT id, title, slug, status, updated_at
+      FROM posts
+      ORDER BY id DESC
+      LIMIT 50
+    `);
+
+    const logs = await db.all(`
+      SELECT *
+      FROM internal_linker_logs
+      ORDER BY id DESC
+      LIMIT 50
+    `);
+
+    res.render("admin/internal-linker", {
+      posts,
+      logs,
+      results: [result]
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/admin/internal-linker/batch", async (req, res, next) => {
+  try {
+    const mode = req.body.mode === "apply" ? "apply" : "dry-run";
+    const limit = Number(req.body.limit || 25);
+
+    const results = await runInternalLinkerBatch(mode, limit);
+
+    const posts = await db.all(`
+      SELECT id, title, slug, status, updated_at
+      FROM posts
+      ORDER BY id DESC
+      LIMIT 50
+    `);
+
+    const logs = await db.all(`
+      SELECT *
+      FROM internal_linker_logs
+      ORDER BY id DESC
+      LIMIT 50
+    `);
+
+    res.render("admin/internal-linker", {
+      posts,
+      logs,
+      results
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+export default router;
+
+
+// ==============================
+// FILE: src/views/admin/internal-linker.ejs
+// ==============================
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Internal Linker</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 24px; }
+    th, td { border: 1px solid #ddd; padding: 8px; vertical-align: top; }
+    th { background: #f4f4f4; text-align: left; }
+    .ok { color: green; font-weight: bold; }
+    .bad { color: red; font-weight: bold; }
+    .muted { color: #666; }
+    form.inline { display: inline-block; margin-right: 8px; }
+    pre { white-space: pre-wrap; background: #f8f8f8; padding: 12px; border: 1px solid #ddd; }
+  </style>
+</head>
+<body>
+  <h1>Internal Linker</h1>
+
+  <h2>Batch Run</h2>
+  <form method="post" action="/admin/internal-linker/batch">
+    <label>Limit:
+      <input type="number" name="limit" value="25" min="1" max="200">
+    </label>
+    <button type="submit" name="mode" value="dry-run">Batch Dry Run</button>
+    <button type="submit" name="mode" value="apply">Batch Apply</button>
+  </form>
+
+  <h2>Posts</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Title</th>
+        <th>Slug</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% posts.forEach(post => { %>
+        <tr>
+          <td><%= post.id %></td>
+          <td><%= post.title %></td>
+          <td><%= post.slug %></td>
+          <td>
+            <form class="inline" method="post" action="/admin/internal-linker/post/<%= post.id %>/dry-run">
+              <button type="submit">Dry Run</button>
+            </form>
+            <form class="inline" method="post" action="/admin/internal-linker/post/<%= post.id %>/apply">
+              <button type="submit">Apply</button>
+            </form>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+
+  <h2>Latest Results</h2>
+  <% if (!results || results.length === 0) { %>
+    <p class="muted">No results yet.</p>
+  <% } else { %>
+    <% results.forEach(result => { %>
+      <div style="border:1px solid #ddd; padding:16px; margin-bottom:16px;">
+        <h3><%= result.postTitle %> (#<%= result.postId %>)</h3>
+        <p>
+          Cluster: <strong><%= result.clusterName || "none" %></strong>
+          |
+          Score: <strong><%= result.clusterScore %></strong>
+          |
+          Mode: <strong><%= result.mode %></strong>
+          |
+          Changed:
+          <span class="<%= result.changed ? 'ok' : 'bad' %>"><%= result.changed ? 'yes' : 'no' %></span>
+        </p>
+
+        <h4>Injections</h4>
+        <ul>
+          <% result.injections.forEach(inj => { %>
+            <li>
+              <strong><%= inj.inserted ? 'INSERTED' : 'SKIPPED' %></strong>
+              —
+              <%= inj.type %> —
+              <%= inj.title %> —
+              <%= inj.url %>
+              <% if (inj.anchorText) { %>
+                — anchor: "<%= inj.anchorText %>"
+              <% } %>
+              <% if (inj.reason) { %>
+                — reason: <%= inj.reason %>
+              <% } %>
+            </li>
+          <% }) %>
+        </ul>
+
+        <h4>Notes</h4>
+        <pre><%= JSON.stringify(result.notes, null, 2) %></pre>
+      </div>
+    <% }) %>
+  <% } %>
+
+  <h2>Recent Logs</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Post</th>
+        <th>Cluster</th>
+        <th>Score</th>
+        <th>Mode</th>
+        <th>Changed</th>
+        <th>Created</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% logs.forEach(log => { %>
+        <tr>
+          <td><%= log.id %></td>
+          <td><%= log.post_title %></td>
+          <td><%= log.cluster_name || "none" %></td>
+          <td><%= log.cluster_score %></td>
+          <td><%= log.mode %></td>
+          <td><%= log.changed ? "yes" : "no" %></td>
+          <td><%= log.created_at %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</body>
+</html>
+
+
+// ==============================
+// FILE: SQL MIGRATION
+// ==============================
+
+CREATE TABLE IF NOT EXISTS internal_linker_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id INTEGER NOT NULL,
+  post_title TEXT NOT NULL,
+  cluster_name TEXT,
+  cluster_score INTEGER NOT NULL DEFAULT 0,
+  mode TEXT NOT NULL,
+  changed INTEGER NOT NULL DEFAULT 0,
+  injections_json TEXT NOT NULL,
+  notes_json TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+
+// ==============================
+// FILE: APP INTEGRATION SNIPPET
+// ==============================
+
+import express from "express";
+import adminInternalLinkerRouter from "./routes/admin.internal-linker";
+
+const app = express();
+
+app.use(express.urlencoded({ extended: true }));
+app.use(adminInternalLinkerRouter);
+
+// make sure your app is already configured for EJS views
+// and that your existing db path + post schema match this code
+
+
+// ==============================
+// FILE: OPTIONAL PACKAGE NOTES
+// ==============================
+
+// Make sure these are installed if not already:
+// npm install express ejs sqlite sqlite3
+// npm install -D typescript @types/express @types/node
